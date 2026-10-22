@@ -11,6 +11,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE, "uploads")
 TOKEN_FILE = os.path.join(BASE, ".admin_token")
 ROSTER_FILE = os.path.join(BASE, ".roster")
+CONFIG_FILE = os.path.join(BASE, ".upload_config")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -54,6 +55,50 @@ def load_roster_pairs():
 def load_roster():
     """应交名单: 仅姓名(去重保序)"""
     return [n for n, _ in load_roster_pairs()]
+
+# ---------- 上传配置(开关 + 命名模板) ----------
+DEFAULT_CONFIG = {"normalize": True, "template": "学号 姓名"}
+TPL_KEYWORDS = ("姓名", "学号", "文件名称", "日期")
+
+def load_config():
+    """读取上传配置; 文件缺失/损坏时回退默认值"""
+    cfg = dict(DEFAULT_CONFIG)
+    try:
+        data = json.load(open(CONFIG_FILE))
+        if isinstance(data, dict):
+            if "normalize" in data:
+                cfg["normalize"] = bool(data["normalize"])
+            if isinstance(data.get("template"), str):
+                cfg["template"] = data["template"]
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+def save_config(cfg):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump({"normalize": bool(cfg.get("normalize")),
+                   "template": str(cfg.get("template") or DEFAULT_CONFIG["template"])},
+                  f, ensure_ascii=False)
+
+def today_str() -> str:
+    """当天日期, 格式 年.月.日(不补零)"""
+    t = time.localtime()
+    return f"{t.tm_year}.{t.tm_mon}.{t.tm_mday}"
+
+def render_template(tpl: str, rname: str, sid: str, stem: str) -> str:
+    """把模板里的四个关键字替换为实际值, 其余字符(连接符号)原样保留。
+    例: 模板「姓名_学号 文件名称」+ 张三/17/example → 「张三_17 example」"""
+    out = tpl
+    for k, v in (("姓名", rname), ("学号", sid),
+                 ("文件名称", stem), ("日期", today_str())):
+        out = out.replace(k, v)
+    return out.strip()
+
+def template_valid(tpl: str) -> bool:
+    """模板合法性: 至少含一个关键字, 且不含文件系统非法字符"""
+    if not any(k in tpl for k in TPL_KEYWORDS):
+        return False
+    return not re.search(r'[\\/:*?"<>|\r\n\t]', tpl)
 
 def _norm(s: str) -> str:
     """匹配用归一化: 去掉所有空白"""
@@ -136,16 +181,22 @@ def student_files_in(target_dir: str, fn: str, pairs):
     return out
 
 def normalize_plan(name: str, pairs, cur_path: str):
-    """计算文件名的规范形式「学号 姓名.ext」。
+    """按管理端配置的模板计算规范文件名。
     识别引擎与核对功能同源: 先精确(剥离学号前缀后的姓名部分)后子串兜底,
     且必须唯一命中一个「有学号」的名单成员才动手。
+    模板可用关键字: 姓名/学号/文件名称/日期(当天, 年.月.日), 可自行排序和
+    添加连接符号; 例「姓名_学号 文件名称」→「张三_17 example」。
     返回 (新文件名 or None, 原因):
-      None+'canonical' 已是标准形式(含 (n) 变体), 不动
+      None+'off'      管理端关闭了自动规范化
+      None+'canonical' 已是模板渲染出的形式(含 (n) 变体), 不动
       None+'unknown'   没识别出是谁
       None+'ambiguous' 命中多个姓名(如小组作业), 不猜
-      None+'noid'      名单里没有学号, 功能未启用
+      None+'noid'      名单里没有学号
       新名+'ok'        建议改名为新名
     注意: 学号一律取名单里的(不信文件名里的), 文件名学号写错也能纠正。"""
+    cfg = load_config()
+    if not cfg.get("normalize"):
+        return None, "off"
     if not any(sid for _, sid in pairs):
         return None, "noid"
     who, why = recognize_student(name, pairs)
@@ -153,39 +204,30 @@ def normalize_plan(name: str, pairs, cur_path: str):
         return None, why
     rname, sid = who
     stem, ext = os.path.splitext(name)
-    d = os.path.dirname(cur_path)
-    base = f"{sid} {rname}{ext}"
-    # 已是「学号 姓名」形式 → 不动
-    if name == base:
+    target = render_template(cfg["template"], rname, sid, stem) + ext
+    if target == name:
         return None, "canonical"
-    # 「学号 姓名(n)」形式: 同目录下没有基础文件时, 这个 (n) 是学生自己
-    # 文件名带来的(非系统重复标记), 去掉它; 有基础文件才是真重复, 保留不动
-    if re.fullmatch(re.escape(sid) + " " + re.escape(rname) + r"\(\d+\)" + re.escape(ext), name):
-        if not os.path.exists(os.path.join(d, base)):
-            return base, "ok"
-        return None, "canonical"
-    canonical = base
     # 目标名已存在(且不是自己)时加 (n) 序号, 绝不覆盖
-    if os.path.exists(os.path.join(d, canonical)) and \
-       os.path.abspath(os.path.join(d, canonical)) != os.path.abspath(cur_path):
-        cstem, cext = os.path.splitext(canonical)
+    d = os.path.dirname(cur_path)
+    if os.path.exists(os.path.join(d, target)) and \
+       os.path.abspath(os.path.join(d, target)) != os.path.abspath(cur_path):
+        cstem, cext = os.path.splitext(target)
         n = 1
         while True:
             trial = f"{cstem}({n}){cext}"
             tp = os.path.join(d, trial)
             if not os.path.exists(tp) or os.path.abspath(tp) == os.path.abspath(cur_path):
-                canonical = trial
+                target = trial
                 break
             n += 1
-    if canonical == name:
+    if target == name:
         return None, "canonical"
-    return canonical, "ok"
+    return target, "ok"
 
 def auto_normalize(target_dir: str, name: str):
-    """上传后自动规范化: 识别出是谁就改成「学号 姓名.ext」。返回最终文件名。"""
+    """上传后自动规范化: 按管理端模板把识别出身份的文件改成标准命名。
+    管理端关闭 / 认不出是谁 / 名单无学号时原样返回。"""
     pairs = load_roster_pairs()
-    if not any(sid for _, sid in pairs):
-        return name
     new, why = normalize_plan(name, pairs, os.path.join(target_dir, name))
     if new:
         os.rename(os.path.join(target_dir, name), os.path.join(target_dir, new))
@@ -704,8 +746,10 @@ def upload():
 @app.post("/upload/check")
 def upload_check():
     """上传前查重(同学端调用, 无需令牌): 该文件夹内是否已有「这个同学」的文件。
-    识别得出是谁时, 返回其已有文件列表(仅限对方名义上传的场景, 属已知取舍);
-    识别不出时退化为「精确同名」判断。"""
+    管理端关闭「名单识别与自动规范化」时一律返回不重复(退化为普通同名 (n) 行为)。"""
+    if not load_config().get("normalize"):
+        return Response(json.dumps({"dup": False}),
+                        mimetype="application/json")
     folder = (request.form.get("folder") or "").strip()[:32]
     if folder:
         folder = safe_name(folder)
@@ -850,6 +894,38 @@ __DL_FOLDER_OPTS__
 </section>
 
 <section class="glass panel">
+ <h3>⚙️ 上传设置</h3>
+ <form method=post action=/admin/settings id=cfgform>
+  <input type=hidden name=token value="__TOKEN__">
+  <input type=hidden name=folder value="__CURFOLDER__">
+  <div class=bar>
+   <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;color:#31405e">
+    <input type=checkbox name=normalize value=1 __NORMON__ style="width:18px;height:18px;cursor:pointer">
+    启用「名单识别 + 自动规范化」
+   </label>
+  </div>
+  <div class=bar style="margin-top:10px">
+   <span class=lbl>命名模板</span>
+   <input type=text name=template id=tpl value="__TPL__" maxlength=120
+    placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称"
+    style="flex:1;min-width:220px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
+   <span>
+    <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
+    <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
+    <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
+    <button type=button class="btn mini" onclick="insTpl('日期')">＋日期</button>
+   </span>
+   <button type=submit class=cta style="font-size:14px;padding:10px 18px">保存设置</button>
+  </div>
+  <p style="font-size:12.5px;color:#8a97ab;margin-top:10px;line-height:1.8">
+   模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。
+   例：输入「姓名_学号 文件名称」→「张三_17 example」；输入「学号-姓名-文件名称」→「17-张三-example」。<br>
+   <b>实时预览：</b><span id=tplPrev style="color:#31405e;font-weight:700"></span><br>
+   关闭开关后：上传文件保持原样（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。</p>
+ </form>
+</section>
+
+<section class="glass panel">
  <h3>✅ 作业核对</h3>
  <div class=bar>
   <span class=lbl>应交名单：__ROSTER_STATUS__</span>
@@ -857,7 +933,7 @@ __DL_FOLDER_OPTS__
   <a class="btn mini" href="/admin/normalize?token=__TOKEN__&folder=__CURFOLDER__">🔧 规范文件名</a>
   <a class=cta style="font-size:14px;padding:10px 18px" href="/admin/check?token=__TOKEN__&folder=__CURFOLDER__">🔍 开始核对</a>
  </div>
- <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">按当前筛选的文件夹核对谁没交；同学上传后若识别出是谁（且名单有其学号），文件会自动改名为「学号 姓名」标准格式，「🔧 规范文件名」可批量处理历史文件</p>
+ <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">按当前筛选的文件夹核对谁没交；「⚙️ 上传设置」里可开关自动规范化、自定义命名模板</p>
 </section>
 
 <section class="glass list">
@@ -925,6 +1001,17 @@ function showTab(w){
 }
 bM.onclick=()=>showTab('manage');
 bU.onclick=()=>showTab('upload');
+// 命名模板: 元素快捷插入 + 实时预览(与服务端 render_template 逻辑一致)
+const tplIn=document.getElementById('tpl'),tplPrev=document.getElementById('tplPrev');
+function insTpl(k){tplIn.value+=k;updTpl();tplIn.focus();}
+function updTpl(){
+ const d=new Date();
+ const today=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate();
+ const s=(tplIn.value||'').replace(/姓名/g,'张三').replace(/学号/g,'20260000000001')
+  .replace(/文件名称/g,'example').replace(/日期/g,today);
+ tplPrev.textContent=s||'(模板为空)';
+}
+if(tplIn){tplIn.oninput=updTpl;updTpl();}
 </script>
 </body></html>""")
 
@@ -1174,6 +1261,8 @@ def admin():
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
+            .replace("__NORMON__", " checked" if load_config().get("normalize") else "")
+            .replace("__TPL__", html.escape(load_config()["template"]))
             .replace("__WARN__", warn_js)
             .replace("__FOLDER_PILL__", folder_pill)
             .replace("__CURFOLDER__", folder)
@@ -1252,6 +1341,21 @@ def admin_roster_save():
     pairs = parse_roster(request.form.get("names") or "")
     with open(ROSTER_FILE, "w") as f:
         f.write("\n".join(f"{n}\t{s}" if s else n for n, s in pairs))
+    folder = norm_folder(request.form.get("folder"))
+    return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
+
+@app.post("/admin/settings")
+def admin_settings():
+    """保存上传设置: 自动规范化开关 + 命名模板"""
+    if not is_admin():
+        abort(401)
+    cfg = load_config()
+    cfg["normalize"] = (request.form.get("normalize") == "1")
+    tpl = (request.form.get("template") or "").strip()[:120]
+    if template_valid(tpl):
+        cfg["template"] = tpl
+    # 模板非法时保留原模板, 仅切换开关
+    save_config(cfg)
     folder = norm_folder(request.form.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
@@ -1360,10 +1464,11 @@ def admin_range():
                      download_name=fname, mimetype="application/zip")
 
 REASON_TXT = {
-    "canonical": "已是标准格式",
+    "canonical": "已是当前模板格式",
     "unknown": "没识别出是谁",
     "ambiguous": "命中多个姓名（如小组作业），不猜",
     "noid": "名单缺学号",
+    "off": "自动规范化已关闭",
 }
 
 @app.get("/admin/normalize")
@@ -1373,11 +1478,13 @@ def admin_normalize():
         abort(401)
     folder = norm_folder(request.args.get("folder"))
     pairs = load_roster_pairs()
+    cfg = load_config()
     fdesc = {"all": "全部文件夹", "__root__": "未分类"}.get(folder, folder)
     scope = f"范围：文件夹「{html.escape(fdesc)}」"
     has_ids = any(sid for _, sid in pairs)
+    enabled = cfg.get("normalize")
     ren, skip = [], []
-    if has_ids:
+    if enabled and has_ids:
         for rel, fn, p in folder_files(folder):
             new, why = normalize_plan(fn, pairs, p)
             (ren if new else skip).append((fn, new or REASON_TXT.get(why, why), rel))
@@ -1397,7 +1504,14 @@ def admin_normalize():
                              for fn, why, rel in skip) + '</section>')
     else:
         skipsec = ""
-    if not has_ids:
+    if not enabled:
+        note = ('<br><span style="color:#b8860b">⚠️ 自动规范化已在管理页关闭</span>')
+        warnbox = ('<div class=warnbox>⚠️ <b>「名单识别与自动规范化」当前是关闭状态。</b>'
+                   '回到管理页的「⚙️ 上传设置」打开开关即可——打开后上传的文件会按命名模板'
+                   '自动改名，这里也能批量处理历史文件。'
+                   '（关闭不影响「作业核对」功能。）</div>')
+        gobtn = ""
+    elif not has_ids:
         note = ('<br><span style="color:#b8860b">⚠️ 名单里还没有学号，自动重命名未启用</span>')
         warnbox = ('<div class=warnbox>⚠️ <b>名单里还没有学号。</b>自动重命名需要「姓名 + 学号」配对——'
                    '请先回管理页点「📝 编辑名单」，把带学号的全员名单重新粘贴保存一次。'
@@ -1406,7 +1520,7 @@ def admin_normalize():
     else:
         note = ""
         warnbox = ('<div class=warnbox>⚠️ <b>此操作会真正重命名文件，不可撤销。</b>'
-                   '请核对上面的清单——学号一律取名单里的值（同学文件名里学号写错也会被纠正）；'
+                   '请核对上面的清单——按管理页「⚙️ 上传设置」里的命名模板生成；'
                    '认不出是谁的、命中多个姓名的（如小组作业）会保持原样，列在下方「保持不变」里。</div>')
         gobtn = (f'<a class=cta href="/admin/normalize/run?token={ADMIN_TOKEN}'
                  f'&folder={quote(folder)}" onclick="return confirm(\'确认执行这 '
