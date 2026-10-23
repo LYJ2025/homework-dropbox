@@ -12,6 +12,7 @@ UPLOAD_DIR = os.path.join(BASE, "uploads")
 TOKEN_FILE = os.path.join(BASE, ".admin_token")
 ROSTER_FILE = os.path.join(BASE, ".roster")
 CONFIG_FILE = os.path.join(BASE, ".upload_config")
+ANNOUNCE_FILE = os.path.join(BASE, ".announcement")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -55,6 +56,32 @@ def load_roster_pairs():
 def load_roster():
     """应交名单: 仅姓名(去重保序)"""
     return [n for n, _ in load_roster_pairs()]
+
+# ---------- 公告栏 ----------
+def load_announcement():
+    """读取公告 {'text', 'time'}; 无公告返回 None"""
+    try:
+        data = json.load(open(ANNOUNCE_FILE))
+        if isinstance(data, dict) and str(data.get("text", "")).strip():
+            return {"text": str(data["text"])[:2000],
+                    "time": str(data.get("time", ""))[:20]}
+    except (OSError, ValueError):
+        pass
+    return None
+
+def save_announcement(text: str):
+    """发布公告; 内容为空 = 撤下公告"""
+    text = (text or "").strip()[:2000]
+    if not text:
+        try:
+            os.remove(ANNOUNCE_FILE)
+        except OSError:
+            pass
+        return
+    with open(ANNOUNCE_FILE, "w") as f:
+        json.dump({"text": text,
+                   "time": time.strftime("%Y-%m-%d %H:%M")}, f,
+                  ensure_ascii=False)
 
 # ---------- 上传配置(开关 + 命名模板) ----------
 DEFAULT_CONFIG = {"normalize": True, "template": "学号 姓名"}
@@ -414,6 +441,13 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 .acts .btn.show{display:inline-flex}
 .msg{text-align:center;margin-top:14px;font-size:15px;min-height:22px;font-weight:600;color:#2e7d5b}
 .msg.err{color:#c0392b}
+.announce{padding:14px 18px;margin-bottom:14px;border-color:rgba(255,190,80,.55);
+ background:rgba(255,247,235,.80)}
+.announce .anrow{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.announce .anico{font-size:18px}
+.announce .antext{font-size:13px;font-weight:800;color:#8a6d1a;letter-spacing:1px}
+.announce .antime{margin-left:8px;font-size:11.5px;font-weight:400;color:#b59a55}
+.announce p{font-size:14px;color:#6b5a2a;line-height:1.8;white-space:pre-wrap;word-break:break-all}
 .mask{position:fixed;inset:0;background:rgba(20,30,55,.45);display:none;
  align-items:center;justify-content:center;z-index:10;padding:20px}
 .mask.on{display:flex}
@@ -439,6 +473,7 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 <div class=wrap>
 <h1>作业提交</h1>
 <p class=sub>支持一次选择多个文件 · 文档 / 表格 / 压缩包 / 图片</p>
+__ANNOUNCE__
 <div class="glass tool">
  <span><label>📁 文件夹</label><select id=folder>__FOLDERS__</select></span>
 </div>
@@ -694,7 +729,16 @@ def index_html() -> str:
     opts = '<option value="" selected disabled>请选择文件夹</option>'
     for d in list_folders():
         opts += f'<option value="{html.escape(d)}">📁 {html.escape(d)}</option>'
-    return INDEX_TPL.replace("__FOLDERS__", opts)
+    ann = load_announcement()
+    if ann:
+        announce = ('<div class="glass announce">'
+                    '<div class=anrow><span class=anico>📢</span>'
+                    '<span class=antext>公告'
+                    f'<span class=antime>{html.escape(ann["time"])}</span></span></div>'
+                    f'<p>{html.escape(ann["text"])}</p></div>')
+    else:
+        announce = ""
+    return INDEX_TPL.replace("__FOLDERS__", opts).replace("__ANNOUNCE__", announce)
 
 @app.get("/")
 def index():
@@ -800,6 +844,10 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 .tab.on{color:#fff;background:linear-gradient(135deg,#4f7cff,#7a5cff);border-color:transparent;
  box-shadow:0 8px 22px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
 .upframe{width:100%;height:calc(100vh - 215px);min-height:620px;border:none;background:transparent;display:block}
+textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
+ border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
+ color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
+textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
 .fmgr{padding-top:12px;border-top:1px solid rgba(255,255,255,.6);margin-top:12px;
  display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
@@ -877,6 +925,20 @@ __FOLDER_OPTS__
   <button type=button class="btn mini danger" onclick="delFolder()">🗑 删除当前文件夹</button>
   <span class="lbl hint">重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</span>
  </div>
+</section>
+
+<section class="glass panel">
+ <h3>📢 公告栏</h3>
+ <form method=post action=/admin/announcement>
+  <input type=hidden name=token value="__TOKEN__">
+  <input type=hidden name=folder value="__CURFOLDER__">
+  <textarea name=text rows=3 maxlength=2000 placeholder="在这里写公告内容，发布后立即显示在同学上传页顶部；清空后发布＝撤下公告">__ANNOUNCE_TEXT__</textarea>
+  <div class=acts style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+   <button type=submit name=action value=publish class=cta style="font-size:14px;padding:10px 18px">📢 发布 / 更新公告</button>
+   <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
+  </div>
+  <p style="font-size:12.5px;color:#8a97ab;margin-top:8px">当前状态：__ANNOUNCE_STATUS__</p>
+ </form>
 </section>
 
 <section class="glass panel">
@@ -1258,11 +1320,16 @@ def admin():
     id_cnt = sum(1 for _, s in roster_pairs if s)
     roster_status = (f"共 {len(roster)} 人（{id_cnt} 人有学号）" if roster
                      else "未设置（点「编辑名单」导入）")
+    ann = load_announcement()
+    ann_text = ann["text"] if ann else ""
+    ann_status = (f"已发布（{ann['time']}，同学端可见）" if ann else "暂无公告")
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
             .replace("__NORMON__", " checked" if load_config().get("normalize") else "")
             .replace("__TPL__", html.escape(load_config()["template"]))
+            .replace("__ANNOUNCE_TEXT__", html.escape(ann_text))
+            .replace("__ANNOUNCE_STATUS__", ann_status)
             .replace("__WARN__", warn_js)
             .replace("__FOLDER_PILL__", folder_pill)
             .replace("__CURFOLDER__", folder)
@@ -1280,6 +1347,18 @@ def _back_query():
     """构造带回筛选状态的跳转参数"""
     folder = norm_folder(request.args.get("folder"))
     return f"folder={quote(folder)}"
+
+@app.post("/admin/announcement")
+def admin_announcement():
+    """发布/更新/撤下公告; 发布后立即显示在同学上传页顶部"""
+    if not is_admin():
+        abort(401)
+    if (request.form.get("action") or "publish") == "clear":
+        save_announcement("")   # 空内容 = 撤下
+    else:
+        save_announcement(request.form.get("text") or "")
+    folder = norm_folder(request.form.get("folder"))
+    return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
 @app.get("/admin/folder/add")
 def folder_add():

@@ -3,6 +3,7 @@ uploads/
 .admin_token
 .roster
 .upload_config
+.announcement
 *.pem
 
 # Python
