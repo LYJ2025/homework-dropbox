@@ -915,12 +915,18 @@ textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:1
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
  color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
 textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
-.fmgr{padding-top:12px;border-top:1px solid rgba(255,255,255,.6);margin-top:12px}
+.fmgr{padding-top:16px;border-top:1px solid rgba(255,255,255,.6);margin-top:22px}
 .fmgr>.lbl{display:block;margin-bottom:10px}
 .fmgr-btns{display:flex;gap:10px;flex-wrap:wrap}
 .fmgr-btns .btn{flex:1;min-width:92px;justify-content:center;text-align:center}
-.fmgr .hint{display:block;width:100%;margin-top:10px;font-size:12.5px;color:#8a97ab;
- font-weight:400;line-height:1.7}
+.fmgr-btns .btn.armed{background:rgba(255,120,100,.22);color:#c0392b;
+ border-color:rgba(255,120,100,.5);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.75}}
+.hintbox{margin-top:10px}
+.hintbox .hb-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:6px}
+.hintbox .hb-text.clamp{max-height:23px;overflow:hidden;position:relative}
+.hintbox .hb-text.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:16px;
+ background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,1))}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .range{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .list{padding:0;overflow:hidden}
@@ -1001,9 +1007,12 @@ __FOLDER_OPTS__
   <div class=fmgr-btns>
    <button type=button class="btn mini" onclick="addFolder()">＋ 新建文件夹</button>
    <button type=button class="btn mini" onclick="renFolder()">✏️ 重命名</button>
-   <button type=button class="btn mini danger" onclick="delFolder()">🗑 删除</button>
+   <button type=button class="btn mini danger" id=delBtn onclick="delFolder()">🗑 删除</button>
   </div>
-  <span class="lbl hint">重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</span>
+  <div class=hintbox>
+   <p class="hb-text clamp" id=hbFmgr>重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</p>
+   <button type=button class="btn mini" onclick="toggleHb('hbFmgr',this)">展开 ▾</button>
+  </div>
  </div>
 </section>
 
@@ -1029,7 +1038,10 @@ __DL_FOLDER_OPTS__
 __NORM_BTN__
 __CHECK_BTN__
  </div>
- <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">__CHECK_HINT__</p>
+ <div class=hintbox>
+  <p class="hb-text clamp" id=hbCheck>__CHECK_HINT__</p>
+  <button type=button class="btn mini" onclick="toggleHb('hbCheck',this)">展开 ▾</button>
+ </div>
 </section>
 
 <section class="glass list">
@@ -1137,9 +1149,25 @@ function renFolder(){const f=ffolder.value;
   +'&name='+encodeURIComponent(f)
   +'&new='+encodeURIComponent(n.trim())
   +'&folder='+encodeURIComponent(f);}
-function delFolder(){const f=ffolder.value;
+let delArm=false,delT=null;
+function delFolder(){
+ const f=ffolder.value;
  if(f==='all'||f==='__root__'){alert('请先在筛选中选择要删除的具体文件夹');return;}
- if(confirm('删除文件夹「'+f+'」会连同其中所有文件一并删除，确定？'))goBack('delete',f);}
+ const b=document.getElementById('delBtn');
+ if(!delArm){  // 第一步: 只进入待确认状态, 不删任何东西
+  delArm=true;b.textContent='⚠️ 再点一次确认';b.classList.add('armed');
+  delT=setTimeout(()=>{delArm=false;b.textContent='🗑 删除';b.classList.remove('armed');},3000);
+  return;}
+ clearTimeout(delT);delArm=false;b.textContent='🗑 删除';b.classList.remove('armed');
+ // 第二步: 再弹窗确认(显示文件夹名, 防删错)
+ if(confirm('删除文件夹「'+f+'」会连同其中所有文件一并删除，确定？'))goBack('delete',f);
+}
+// 提示文字 展开/缩回(通用)
+function toggleHb(id,btn){
+ const t=document.getElementById(id);
+ const clamp=t.classList.toggle('clamp');
+ btn.textContent=clamp?'展开 ▾':'缩回 ▴';
+}
 // 批量下载: 先 fetch 预检, 无文件就在当前页弹窗(不跳转不白屏), 有文件才触发下载
 const rform=document.getElementById('rform'),rbtn=document.getElementById('rbtn');
 rform.onsubmit=e=>{
