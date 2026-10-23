@@ -92,7 +92,8 @@ def _clamp(v, lo, hi, default):
         return default
     return max(lo, min(hi, v))
 
-DEFAULT_CONFIG = {"normalize": True, "template": "学号 姓名",
+DEFAULT_CONFIG = {"recognize": True, "normalize": True,
+                  "template": "学号 姓名",
                   "max_mb": 200, "max_conc": 20}
 TPL_KEYWORDS = ("姓名", "学号", "文件名称", "日期")
 
@@ -102,6 +103,8 @@ def load_config():
     try:
         data = json.load(open(CONFIG_FILE))
         if isinstance(data, dict):
+            if "recognize" in data:
+                cfg["recognize"] = bool(data["recognize"])
             if "normalize" in data:
                 cfg["normalize"] = bool(data["normalize"])
             if isinstance(data.get("template"), str) and data["template"].strip():
@@ -116,7 +119,8 @@ def load_config():
 
 def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
-        json.dump({"normalize": bool(cfg.get("normalize")),
+        json.dump({"recognize": bool(cfg.get("recognize")),
+                   "normalize": bool(cfg.get("normalize")),
                    "template": str(cfg.get("template") or DEFAULT_CONFIG["template"]),
                    "max_mb": _clamp(cfg.get("max_mb"), 10, 5000, DEFAULT_CONFIG["max_mb"]),
                    "max_conc": _clamp(cfg.get("max_conc"), 1, 100, DEFAULT_CONFIG["max_conc"])},
@@ -237,7 +241,7 @@ def normalize_plan(name: str, pairs, cur_path: str):
       新名+'ok'        建议改名为新名
     注意: 学号一律取名单里的(不信文件名里的), 文件名学号写错也能纠正。"""
     cfg = load_config()
-    if not cfg.get("normalize"):
+    if not (cfg.get("normalize") and cfg.get("recognize")):
         return None, "off"
     if not any(sid for _, sid in pairs):
         return None, "noid"
@@ -806,7 +810,7 @@ def upload():
 def upload_check():
     """上传前查重(同学端调用, 无需令牌): 该文件夹内是否已有「这个同学」的文件。
     管理端关闭「名单识别与自动规范化」时一律返回不重复(退化为普通同名 (n) 行为)。"""
-    if not load_config().get("normalize"):
+    if not load_config().get("recognize"):
         return Response(json.dumps({"dup": False}),
                         mimetype="application/json")
     folder = (request.form.get("folder") or "").strip()[:32]
@@ -860,51 +864,43 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
  box-shadow:0 8px 22px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
 .upframe{width:100%;height:calc(100vh - 215px);min-height:620px;border:none;background:transparent;display:block}
 
-/* ===== 右上角图标按钮 + 弹出面板(公告栏/上传设置) ===== */
-h1{padding-right:118px}
-.fab{position:fixed;top:14px;z-index:30;width:46px;height:46px;border:none;cursor:pointer;
- border-radius:14px;font-size:21px;color:#3a5bcc;background:rgba(255,255,255,.82);
- border:1px solid rgba(255,255,255,.9);box-shadow:0 4px 16px rgba(31,45,80,.18);
- backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.2s;
- display:flex;align-items:center;justify-content:center}
-.fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(31,45,80,.26)}
-.fab:active{transform:translateY(0)}
-#annFab{right:72px}
-#cfgFab{right:16px}
-.pop{position:fixed;top:70px;right:16px;z-index:29;width:min(430px,calc(100vw - 32px));
- max-height:calc(100vh - 94px);overflow-y:auto;padding:20px;display:none}
-.pop.on{display:block;animation:popin .18s ease}
-@keyframes popin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
-.pop h3{font-size:17px;font-weight:800;color:#31405e;margin-bottom:14px;
- display:flex;align-items:center;justify-content:space-between}
-.pop h3 .x{border:none;background:rgba(255,120,100,.12);color:#c0392b;border-radius:9px;
- width:30px;height:30px;cursor:pointer;font-size:14px;font-weight:700;flex-shrink:0}
-.pop h3 .x:hover{background:rgba(255,120,100,.25)}
-.pop .sw label{display:flex;align-items:center;gap:9px;cursor:pointer;
- font-size:14px;font-weight:700;color:#31405e}
-.pop .sw input{width:18px;height:18px;cursor:pointer;accent-color:#4f7cff;flex-shrink:0}
-.pop .fld{margin:15px 0}
-.pop .fld .cap{display:block;font-size:13px;font-weight:700;color:#5a6a81;margin-bottom:7px}
-.pop input[type=text],.pop input[type=number],.pop textarea{width:100%;font-family:inherit;
+/* ===== 四个TAB / 设置页控件 ===== */
+.tabs .tab{font-size:14px;padding:12px 6px}
+.tabs .tab .tic{display:block;font-size:17px;margin-bottom:2px}
+.sub2{font-size:13px;color:#8a97ab;line-height:1.8;margin-bottom:14px}
+.panel .sw{margin:10px 0}
+.panel .sw label{display:flex;align-items:center;gap:9px;cursor:pointer;
+ font-size:14px;font-weight:700;color:#31405e;line-height:1.5}
+.panel .sw input{width:18px;height:18px;cursor:pointer;accent-color:#4f7cff;flex-shrink:0}
+.panel .sw input:disabled+span,.panel .sw label:has(input:disabled){opacity:.45;cursor:not-allowed}
+.panel .fld{margin:16px 0}
+.panel .fld .cap{display:block;font-size:13px;font-weight:700;color:#5a6a81;margin-bottom:7px}
+.panel input[type=text],.panel input[type=number],.panel textarea{width:100%;font-family:inherit;
  font-size:14px;padding:11px 13px;border-radius:12px;color:#243049;outline:none;
  border:1.5px solid rgba(120,140,180,.5);background:rgba(255,255,255,.9);
  box-shadow:inset 0 1px 3px rgba(31,45,80,.05);transition:.2s;box-sizing:border-box}
-.pop input[type=text]:focus,.pop input[type=number]:focus,.pop textarea:focus{
+.panel input[type=text]:focus,.panel input[type=number]:focus,.panel textarea:focus{
  border-color:#4f7cff;box-shadow:0 0 0 3px rgba(79,124,255,.16)}
-.pop textarea{resize:vertical;min-height:96px;line-height:1.7}
-.pop .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
-.pop .popbtns{display:flex;gap:10px;margin-top:6px}
-.pop .popbtns .cta{flex:1;text-align:center;justify-content:center;font-size:15px;padding:13px 16px}
-.pop .popbtns .btn{flex:1;justify-content:center;text-align:center;font-size:14px;padding:12px 14px}
-.pop .note{font-size:12.5px;color:#8a97ab;line-height:1.9;margin-top:14px}
-.pop .note b{color:#5a6a81}
+.panel textarea{resize:vertical;min-height:130px;line-height:1.8}
+.panel .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.panel .numrow{display:flex;align-items:center;gap:9px}
+.panel .numrow input{width:100px;flex-shrink:0;text-align:center}
+.panel .numrow .unit{font-size:14px;font-weight:700;color:#31405e}
+.panel .numrow .rng{font-size:12.5px;color:#8a97ab}
+.panel .popbtns{display:flex;gap:10px;margin-top:8px}
+.panel .popbtns .cta{flex:1;text-align:center;justify-content:center;font-size:15px;padding:13px 16px}
+.panel .popbtns .btn{flex:1;justify-content:center;text-align:center;font-size:14px;padding:12px 14px}
+.panel .note{font-size:12.5px;color:#8a97ab;line-height:1.9;margin-top:14px}
+.panel .note b{color:#5a6a81}
+.panel .note.clamp{max-height:46px;overflow:hidden;position:relative;margin-bottom:8px}
+.panel .note.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:26px;
+ background:linear-gradient(transparent,rgba(255,255,255,.92))}
 #tplPrev{color:#31405e;font-weight:700}
 @media(max-width:600px){
- .fab{top:10px;width:42px;height:42px;font-size:19px}
- #annFab{right:66px}
- #cfgFab{right:14px}
- .pop{top:62px;right:14px}
- h1{padding-right:104px}
+ .tabs .tab{font-size:13px;padding:11px 4px}
+ .tabs .tab .tic{font-size:16px}
+ .panel .numrow input{width:88px}
+}
 }
 textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
@@ -965,7 +961,9 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <div class=tabs>
  <button type=button class="tab on" id=tabBtnManage>📋 文件管理</button>
  <button type=button class=tab id=tabBtnUpload>⬆️ 上传文件</button>
-</div>
+ <button type=button class=tab id=tabBtnAnn>📢 公告栏</button>
+ <button type=button class=tab id=tabBtnCfg>⚙️ 设置</button>
+
 <div id=tabManage>
 <section class="glass panel">
  <div class=bar>
@@ -1008,10 +1006,10 @@ __DL_FOLDER_OPTS__
  <div class=bar>
   <span class=lbl>应交名单：__ROSTER_STATUS__</span>
   <a class="btn mini" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__">📝 编辑名单</a>
-  <a class="btn mini" href="/admin/normalize?token=__TOKEN__&folder=__CURFOLDER__">🔧 规范文件名</a>
-  <a class=cta style="font-size:14px;padding:10px 18px" href="/admin/check?token=__TOKEN__&folder=__CURFOLDER__">🔍 开始核对</a>
+__NORM_BTN__
+__CHECK_BTN__
  </div>
- <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">按当前筛选的文件夹核对谁没交；右上角 ⚙️ 按钮里可开关自动规范化、自定义命名模板、调整上传上限</p>
+ <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">__CHECK_HINT__</p>
 </section>
 
 <section class="glass list">
@@ -1028,61 +1026,73 @@ __ROWS__
 <div id=tabUpload style="display:none">
  <iframe src="/" class=upframe title="上传文件"></iframe>
 </div>
-<button class=fab id=annFab title="公告栏">📢</button>
-<button class=fab id=cfgFab title="上传设置">⚙️</button>
-
-<div class="glass pop" id=annPop>
- <h3>📢 公告栏<button type=button class=x onclick="closePop('ann')">✕</button></h3>
- <form method=post action=/admin/announcement>
-  <input type=hidden name=token value="__TOKEN__">
-  <input type=hidden name=folder value="__CURFOLDER__">
-  <div class=fld>
-   <span class=cap>公告内容（发布后立即显示在同学上传页顶部，支持多行）</span>
-   <textarea name=text rows=4 maxlength=2000 placeholder="例如：请于本周五前上传作业，命名格式：学号+姓名">__ANNOUNCE_TEXT__</textarea>
-  </div>
-  <div class=popbtns>
-   <button type=submit name=action value=publish class=cta>📢 发布 / 更新</button>
-   <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
-  </div>
-  <p class=note>当前状态：__ANNOUNCE_STATUS__<br>清空内容再发布 ＝ 撤下公告。</p>
- </form>
+<div id=tabUpload style="display:none">
+ <iframe src="/" class=upframe title="上传文件"></iframe>
 </div>
 
-<div class="glass pop" id=cfgPop>
- <h3>⚙️ 上传设置<button type=button class=x onclick="closePop('cfg')">✕</button></h3>
- <form method=post action=/admin/settings id=cfgform>
-  <input type=hidden name=token value="__TOKEN__">
-  <input type=hidden name=folder value="__CURFOLDER__">
-  <div class=sw>
-   <label><input type=checkbox name=normalize value=1 __NORMON__> 启用「名单识别 + 自动规范化」</label>
-  </div>
-  <div class=fld>
-   <span class=cap>命名模板</span>
-   <input type=text name=template id=tpl value="__TPL__" maxlength=120
-    placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称">
-   <div class=chips>
-    <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
-    <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
-    <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
-    <button type=button class="btn mini" onclick="insTpl('日期')">＋日期</button>
+<div id=tabAnn style="display:none">
+ <section class="glass panel">
+  <h3>📢 公告栏</h3>
+  <p class=sub2>发布后立即显示在同学上传页顶部，支持多行；清空内容再发布 ＝ 撤下公告。</p>
+  <form method=post action=/admin/announcement>
+   <input type=hidden name=token value="__TOKEN__">
+   <input type=hidden name=folder value="__CURFOLDER__">
+   <div class=fld>
+    <span class=cap>公告内容</span>
+    <textarea name=text rows=6 maxlength=2000 placeholder="例如：&#10;请于本周五前上传作业，命名格式：学号+姓名&#10;有特殊情况请直接联系学习委员">__ANNOUNCE_TEXT__</textarea>
    </div>
-  </div>
-  <div class=fld>
-   <span class=cap>单文件上限（MB，10–5000）</span>
-   <input type=number name=max_mb min=10 max=5000 value="__MAX_MB_CFG__">
-  </div>
-  <div class=fld>
-   <span class=cap>同时上传（个，1–100）</span>
-   <input type=number name=max_conc min=1 max=100 value="__MAX_CONC_CFG__">
-  </div>
-  <button type=submit class=cta style="width:100%;margin-top:4px;text-align:center;justify-content:center">保存设置</button>
-  <p class=note>
-   模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。
-   例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br>
-   <b>实时预览：</b><span id=tplPrev></span><br>
-   关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。<br>
-   单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
- </form>
+   <div class=popbtns>
+    <button type=submit name=action value=publish class=cta>📢 发布 / 更新公告</button>
+    <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
+   </div>
+   <p class=note>当前状态：<b>__ANNOUNCE_STATUS__</b></p>
+  </form>
+ </section>
+</div>
+
+<div id=tabCfg style="display:none">
+ <section class="glass panel">
+  <h3>⚙️ 上传设置</h3>
+  <p class=sub2>名单识别用于作业核对与重复提交提示；自动规范化用于上传后按模板改名。关掉开关，管理页对应功能入口随之隐藏。</p>
+  <form method=post action=/admin/settings id=cfgform>
+   <input type=hidden name=token value="__TOKEN__">
+   <input type=hidden name=folder value="__CURFOLDER__">
+   <div class=sw>
+    <label><input type=checkbox name=recognize value=1 id=recOn __RECON__> 启用「名单识别」（作业核对 · 重复提交提示）</label>
+   </div>
+   <div class=sw>
+    <label><input type=checkbox name=normalize value=1 id=normOn __NORMON__> 启用「自动规范化文件名」（按模板改名）</label>
+   </div>
+   <div class=fld>
+    <span class=cap>命名模板</span>
+    <input type=text name=template id=tpl value="__TPL__" maxlength=120
+     placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称">
+    <div class=chips>
+     <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
+     <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
+     <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
+     <button type=button class="btn mini" onclick="insTpl('日期')">＋日期</button>
+    </div>
+   </div>
+   <div class=fld>
+    <span class=cap>单文件上限</span>
+    <div class=numrow>
+     <input type=number name=max_mb min=10 max=5000 value="__MAX_MB_CFG__">
+     <span class=unit>MB</span><span class=rng>（10–5000）</span>
+    </div>
+   </div>
+   <div class=fld>
+    <span class=cap>同时上传数量</span>
+    <div class=numrow>
+     <input type=number name=max_conc min=1 max=100 value="__MAX_CONC_CFG__">
+     <span class=unit>个</span><span class=rng>（1–100）</span>
+    </div>
+   </div>
+   <button type=submit class=cta style="width:100%;margin-top:6px;text-align:center;justify-content:center">保存设置</button>
+   <p class="note clamp" id=cfgNote>模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
+   <button type=button class="btn mini" id=noteBtn onclick="toggleNote()">展开说明 ▾</button>
+  </form>
+ </section>
 </div>
 
 </div>
@@ -1124,27 +1134,35 @@ rform.onsubmit=e=>{
  }).catch(()=>{rbtn.disabled=false;
   alert('网络异常，无法确认文件数量，请重试');});
 };
-// 顶部 TAB: 文件管理 / 上传文件(iframe 加载与同学端完全一致的上传页)
+// 顶部TAB: 文件管理 / 上传文件 / 公告栏 / 设置(切页, 回管理页自动刷新)
 const tabManage=document.getElementById('tabManage'),tabUpload=document.getElementById('tabUpload'),
- bM=document.getElementById('tabBtnManage'),bU=document.getElementById('tabBtnUpload');
+ tabAnn=document.getElementById('tabAnn'),tabCfg=document.getElementById('tabCfg'),
+ bM=document.getElementById('tabBtnManage'),bU=document.getElementById('tabBtnUpload'),
+ bA=document.getElementById('tabBtnAnn'),bC=document.getElementById('tabBtnCfg');
 function showTab(w){
- const up=w==='upload';
- tabManage.style.display=up?'none':'block';
- tabUpload.style.display=up?'block':'none';
- bM.classList.toggle('on',!up);bU.classList.toggle('on',up);
- if(!up)location.reload();  // 切回管理页时刷新, 立刻看到刚传的文件
+ const map={manage:tabManage,upload:tabUpload,ann:tabAnn,cfg:tabCfg};
+ const btns={manage:bM,upload:bU,ann:bA,cfg:bC};
+ for(const k in map){map[k].style.display=(k===w)?'block':'none';
+  btns[k].classList.toggle('on',k===w);}
+ if(w==='manage')location.reload();  // 切回管理页时刷新, 看到最新文件
 }
 bM.onclick=()=>showTab('manage');
 bU.onclick=()=>showTab('upload');
-// 右上角图标按钮: 公告栏 / 上传设置 弹出面板(点外面或✕关闭)
-const annFab=document.getElementById('annFab'),cfgFab=document.getElementById('cfgFab'),
- annPop=document.getElementById('annPop'),cfgPop=document.getElementById('cfgPop');
-function closePop(w){(w==='ann'?annPop:cfgPop).classList.remove('on');}
-annFab.onclick=e=>{e.stopPropagation();cfgPop.classList.remove('on');annPop.classList.toggle('on');};
-cfgFab.onclick=e=>{e.stopPropagation();annPop.classList.remove('on');cfgPop.classList.toggle('on');};
-document.addEventListener('click',e=>{
- if(!e.target.closest('.pop')&&!e.target.closest('.fab')){
-  annPop.classList.remove('on');cfgPop.classList.remove('on');}});
+bA.onclick=()=>showTab('ann');
+bC.onclick=()=>showTab('cfg');
+// 设置页: 名单识别关 → 自动规范化 checkbox 禁用(规范化依赖识别)
+const recOn=document.getElementById('recOn'),normOn=document.getElementById('normOn');
+if(recOn&&normOn){
+ const syncNorm=()=>{normOn.disabled=!recOn.checked;};
+ recOn.onchange=syncNorm;syncNorm();
+}
+// 说明文字 展开/缩回
+function toggleNote(){
+ const n=document.getElementById('cfgNote'),b=document.getElementById('noteBtn');
+ const clamp=n.classList.toggle('clamp');
+ b.textContent=clamp?'展开说明 ▾':'缩回说明 ▴';
+}
+
 
 // 命名模板: 元素快捷插入 + 实时预览(与服务端 render_template 逻辑一致)
 const tplIn=document.getElementById('tpl'),tplPrev=document.getElementById('tplPrev');
@@ -1406,10 +1424,31 @@ def admin():
     ann = load_announcement()
     ann_text = ann["text"] if ann else ""
     ann_status = (f"已发布（{ann['time']}，同学端可见）" if ann else "暂无公告")
+    _cfg = load_config()
+    _rec = _cfg.get("recognize", True)
+    _norm = _cfg.get("normalize", True) and _rec
+    norm_btn = (f'  <a class="btn mini" href="/admin/normalize?token={ADMIN_TOKEN}'
+                f'&folder={quote(folder)}">🔧 规范文件名</a>' if _norm else '')
+    check_btn = (f'  <a class=cta style="font-size:14px;padding:10px 18px" '
+                 f'href="/admin/check?token={ADMIN_TOKEN}&folder={quote(folder)}">🔍 开始核对</a>'
+                 if _rec else '')
+    if not _rec:
+        check_hint = ('名单识别已在「⚙️ 设置」里关闭——开启后此处显示核对入口，'
+                      '同学上传时也不再弹出重复提交提示。')
+    elif not _norm:
+        check_hint = ('按当前筛选的文件夹核对谁没交；自动规范化已关闭（上传的文件保持原名，'
+                      '同名加 (1)），所以在「⚙️ 设置」里开启后才有「规范文件名」批量入口。')
+    else:
+        check_hint = ('按当前筛选的文件夹核对谁没交；同学上传后若识别出是谁（且名单有其学号），'
+                      '文件会按命名模板自动改名，「🔧 规范文件名」可批量处理历史文件')
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
-            .replace("__NORMON__", " checked" if load_config().get("normalize") else "")
+            .replace("__RECON__", " checked" if _cfg.get("recognize") else "")
+            .replace("__NORMON__", " checked" if _cfg.get("normalize") else "")
+            .replace("__NORM_BTN__", norm_btn)
+            .replace("__CHECK_BTN__", check_btn)
+            .replace("__CHECK_HINT__", check_hint)
             .replace("__TPL__", html.escape(load_config()["template"]))
             .replace("__MAX_MB_CFG__", str(load_config()["max_mb"]))
             .replace("__MAX_CONC_CFG__", str(load_config()["max_conc"]))
@@ -1514,7 +1553,8 @@ def admin_settings():
     if not is_admin():
         abort(401)
     cfg = load_config()
-    cfg["normalize"] = (request.form.get("normalize") == "1")
+    cfg["recognize"] = (request.form.get("recognize") == "1")
+    cfg["normalize"] = (request.form.get("normalize") == "1") and cfg["recognize"]
     tpl = (request.form.get("template") or "").strip()[:120]
     if template_valid(tpl):
         cfg["template"] = tpl
@@ -1648,7 +1688,7 @@ def admin_normalize():
     fdesc = {"all": "全部文件夹", "__root__": "未分类"}.get(folder, folder)
     scope = f"范围：文件夹「{html.escape(fdesc)}」"
     has_ids = any(sid for _, sid in pairs)
-    enabled = cfg.get("normalize")
+    enabled = cfg.get("normalize") and cfg.get("recognize")
     ren, skip = [], []
     if enabled and has_ids:
         for rel, fn, p in folder_files(folder):
