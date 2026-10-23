@@ -922,6 +922,8 @@ textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124
 .fmgr-btns .btn.armed{background:rgba(255,120,100,.22);color:#c0392b;
  border-color:rgba(255,120,100,.5);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.75}}
+.stackbtn{display:flex;flex-direction:column;gap:10px}
+.stackbtn .btn{justify-content:center;text-align:center;padding:13px 16px;width:100%;box-sizing:border-box}
 .hintbox{margin-top:12px}
 .hintbox-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:8px}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
@@ -1028,11 +1030,7 @@ __DL_FOLDER_OPTS__
 
 <section class="glass panel">
  <h3>✅ 作业核对</h3>
- <div class=bar>
-  <span class=lbl>应交名单：__ROSTER_STATUS__</span>
-  <a class="btn mini" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__">📝 编辑名单</a>
-__NORM_BTN__
- </div>
+ <p style="font-size:14px;color:#5a6a81;font-weight:600;margin-bottom:4px">应交名单：__ROSTER_STATUS__</p>
  <div class=hintbox>
   <p class=hintbox-text id=hbCheck style="display:none">__CHECK_HINT__</p>
   <button type=button class="btn mini" onclick="toggleHb('hbCheck',this)">展开说明 ▾</button>
@@ -1119,6 +1117,15 @@ __ROWS__
    <p class=note id=cfgNote style="display:none">模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
    <button type=button class="btn mini" id=noteBtn onclick="toggleNote()">展开说明 ▾</button>
   </form>
+ </section>
+ <section class="glass panel">
+  <h3>📋 名单与规范设置</h3>
+  <p class=sub2>应交名单：__ROSTER_STATUS__</p>
+  <div class=stackbtn>
+   <a class="btn" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__">📝 编辑名单</a>
+__NORM_BTN__
+  </div>
+  <p class=hintbox-text style="margin-top:14px">名单用于核对谁交了、识别重复提交；「规范文件名」按上面的命名模板批量改名历史文件，识别不出身份的文件不会动。</p>
  </section>
 </div>
 
@@ -1474,7 +1481,7 @@ def admin():
     _cfg = load_config()
     _rec = _cfg.get("recognize", True)
     _norm = _cfg.get("normalize", True) and _rec
-    norm_btn = (f'  <a class="btn mini" href="/admin/normalize?token={ADMIN_TOKEN}'
+    norm_btn = (f'   <a class="btn" href="/admin/normalize?token={ADMIN_TOKEN}'
                 f'&folder={quote(folder)}">🔧 规范文件名</a>' if _norm else '')
     check_icon = (f'<button type=button class=ticbtn id=btnCheck title="作业核对" '
                   f'onclick="location=\'/admin/check?token={ADMIN_TOKEN}'
