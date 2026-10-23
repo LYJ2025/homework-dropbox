@@ -859,6 +859,53 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 .tab.on{color:#fff;background:linear-gradient(135deg,#4f7cff,#7a5cff);border-color:transparent;
  box-shadow:0 8px 22px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
 .upframe{width:100%;height:calc(100vh - 215px);min-height:620px;border:none;background:transparent;display:block}
+
+/* ===== 右上角图标按钮 + 弹出面板(公告栏/上传设置) ===== */
+h1{padding-right:118px}
+.fab{position:fixed;top:14px;z-index:30;width:46px;height:46px;border:none;cursor:pointer;
+ border-radius:14px;font-size:21px;color:#3a5bcc;background:rgba(255,255,255,.82);
+ border:1px solid rgba(255,255,255,.9);box-shadow:0 4px 16px rgba(31,45,80,.18);
+ backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.2s;
+ display:flex;align-items:center;justify-content:center}
+.fab:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(31,45,80,.26)}
+.fab:active{transform:translateY(0)}
+#annFab{right:72px}
+#cfgFab{right:16px}
+.pop{position:fixed;top:70px;right:16px;z-index:29;width:min(430px,calc(100vw - 32px));
+ max-height:calc(100vh - 94px);overflow-y:auto;padding:20px;display:none}
+.pop.on{display:block;animation:popin .18s ease}
+@keyframes popin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.pop h3{font-size:17px;font-weight:800;color:#31405e;margin-bottom:14px;
+ display:flex;align-items:center;justify-content:space-between}
+.pop h3 .x{border:none;background:rgba(255,120,100,.12);color:#c0392b;border-radius:9px;
+ width:30px;height:30px;cursor:pointer;font-size:14px;font-weight:700;flex-shrink:0}
+.pop h3 .x:hover{background:rgba(255,120,100,.25)}
+.pop .sw label{display:flex;align-items:center;gap:9px;cursor:pointer;
+ font-size:14px;font-weight:700;color:#31405e}
+.pop .sw input{width:18px;height:18px;cursor:pointer;accent-color:#4f7cff;flex-shrink:0}
+.pop .fld{margin:15px 0}
+.pop .fld .cap{display:block;font-size:13px;font-weight:700;color:#5a6a81;margin-bottom:7px}
+.pop input[type=text],.pop input[type=number],.pop textarea{width:100%;font-family:inherit;
+ font-size:14px;padding:11px 13px;border-radius:12px;color:#243049;outline:none;
+ border:1.5px solid rgba(120,140,180,.5);background:rgba(255,255,255,.9);
+ box-shadow:inset 0 1px 3px rgba(31,45,80,.05);transition:.2s;box-sizing:border-box}
+.pop input[type=text]:focus,.pop input[type=number]:focus,.pop textarea:focus{
+ border-color:#4f7cff;box-shadow:0 0 0 3px rgba(79,124,255,.16)}
+.pop textarea{resize:vertical;min-height:96px;line-height:1.7}
+.pop .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.pop .popbtns{display:flex;gap:10px;margin-top:6px}
+.pop .popbtns .cta{flex:1;text-align:center;justify-content:center;font-size:15px;padding:13px 16px}
+.pop .popbtns .btn{flex:1;justify-content:center;text-align:center;font-size:14px;padding:12px 14px}
+.pop .note{font-size:12.5px;color:#8a97ab;line-height:1.9;margin-top:14px}
+.pop .note b{color:#5a6a81}
+#tplPrev{color:#31405e;font-weight:700}
+@media(max-width:600px){
+ .fab{top:10px;width:42px;height:42px;font-size:19px}
+ #annFab{right:66px}
+ #cfgFab{right:14px}
+ .pop{top:62px;right:14px}
+ h1{padding-right:104px}
+}
 textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
  color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
@@ -943,20 +990,6 @@ __FOLDER_OPTS__
 </section>
 
 <section class="glass panel">
- <h3>📢 公告栏</h3>
- <form method=post action=/admin/announcement>
-  <input type=hidden name=token value="__TOKEN__">
-  <input type=hidden name=folder value="__CURFOLDER__">
-  <textarea name=text rows=3 maxlength=2000 placeholder="在这里写公告内容，发布后立即显示在同学上传页顶部；清空后发布＝撤下公告">__ANNOUNCE_TEXT__</textarea>
-  <div class=acts style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-   <button type=submit name=action value=publish class=cta style="font-size:14px;padding:10px 18px">📢 发布 / 更新公告</button>
-   <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
-  </div>
-  <p style="font-size:12.5px;color:#8a97ab;margin-top:8px">当前状态：__ANNOUNCE_STATUS__</p>
- </form>
-</section>
-
-<section class="glass panel">
  <h3>🗜️ 批量下载（按文件夹打包 ZIP）</h3>
  <form method=get action=/admin/range class=range id=rform>
   <input type=hidden name=token value="__TOKEN__">
@@ -971,49 +1004,6 @@ __DL_FOLDER_OPTS__
 </section>
 
 <section class="glass panel">
- <h3>⚙️ 上传设置</h3>
- <form method=post action=/admin/settings id=cfgform>
-  <input type=hidden name=token value="__TOKEN__">
-  <input type=hidden name=folder value="__CURFOLDER__">
-  <div class=bar>
-   <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;color:#31405e">
-    <input type=checkbox name=normalize value=1 __NORMON__ style="width:18px;height:18px;cursor:pointer">
-    启用「名单识别 + 自动规范化」
-   </label>
-  </div>
-  <div class=bar style="margin-top:10px">
-   <span class=lbl>命名模板</span>
-   <input type=text name=template id=tpl value="__TPL__" maxlength=120
-    placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称"
-    style="flex:1;min-width:220px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
-   <span>
-    <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
-    <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
-    <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
-    <button type=button class="btn mini" onclick="insTpl('日期')">＋日期</button>
-   </span>
-   <button type=submit class=cta style="font-size:14px;padding:10px 18px">保存设置</button>
-  </div>
-  <div class=bar style="margin-top:10px">
-   <span class=lbl>单文件上限</span>
-   <input type=number name=max_mb min=10 max=5000 value="__MAX_MB_CFG__"
-    style="width:110px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
-   <span class=lbl>MB（10–5000）</span>
-   <span class=lbl>同时上传</span>
-   <input type=number name=max_conc min=1 max=100 value="__MAX_CONC_CFG__"
-    style="width:90px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
-   <span class=lbl>个（1–100）</span>
-  </div>
-  <p style="font-size:12.5px;color:#8a97ab;margin-top:10px;line-height:1.8">
-   模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。
-   例：输入「姓名_学号 文件名称」→「张三_17 example」；输入「学号-姓名-文件名称」→「17-张三-example」。<br>
-   <b>实时预览：</b><span id=tplPrev style="color:#31405e;font-weight:700"></span><br>
-   关闭开关后：上传文件保持原样（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。<br>
-   「单文件上限 / 同时上传」只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
- </form>
-</section>
-
-<section class="glass panel">
  <h3>✅ 作业核对</h3>
  <div class=bar>
   <span class=lbl>应交名单：__ROSTER_STATUS__</span>
@@ -1021,7 +1011,7 @@ __DL_FOLDER_OPTS__
   <a class="btn mini" href="/admin/normalize?token=__TOKEN__&folder=__CURFOLDER__">🔧 规范文件名</a>
   <a class=cta style="font-size:14px;padding:10px 18px" href="/admin/check?token=__TOKEN__&folder=__CURFOLDER__">🔍 开始核对</a>
  </div>
- <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">按当前筛选的文件夹核对谁没交；「⚙️ 上传设置」里可开关自动规范化、自定义命名模板</p>
+ <p style="font-size:12.5px;color:#8a97ab;margin-top:8px;line-height:1.7">按当前筛选的文件夹核对谁没交；右上角 ⚙️ 按钮里可开关自动规范化、自定义命名模板、调整上传上限</p>
 </section>
 
 <section class="glass list">
@@ -1038,6 +1028,63 @@ __ROWS__
 <div id=tabUpload style="display:none">
  <iframe src="/" class=upframe title="上传文件"></iframe>
 </div>
+<button class=fab id=annFab title="公告栏">📢</button>
+<button class=fab id=cfgFab title="上传设置">⚙️</button>
+
+<div class="glass pop" id=annPop>
+ <h3>📢 公告栏<button type=button class=x onclick="closePop('ann')">✕</button></h3>
+ <form method=post action=/admin/announcement>
+  <input type=hidden name=token value="__TOKEN__">
+  <input type=hidden name=folder value="__CURFOLDER__">
+  <div class=fld>
+   <span class=cap>公告内容（发布后立即显示在同学上传页顶部，支持多行）</span>
+   <textarea name=text rows=4 maxlength=2000 placeholder="例如：请于本周五前上传作业，命名格式：学号+姓名">__ANNOUNCE_TEXT__</textarea>
+  </div>
+  <div class=popbtns>
+   <button type=submit name=action value=publish class=cta>📢 发布 / 更新</button>
+   <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
+  </div>
+  <p class=note>当前状态：__ANNOUNCE_STATUS__<br>清空内容再发布 ＝ 撤下公告。</p>
+ </form>
+</div>
+
+<div class="glass pop" id=cfgPop>
+ <h3>⚙️ 上传设置<button type=button class=x onclick="closePop('cfg')">✕</button></h3>
+ <form method=post action=/admin/settings id=cfgform>
+  <input type=hidden name=token value="__TOKEN__">
+  <input type=hidden name=folder value="__CURFOLDER__">
+  <div class=sw>
+   <label><input type=checkbox name=normalize value=1 __NORMON__> 启用「名单识别 + 自动规范化」</label>
+  </div>
+  <div class=fld>
+   <span class=cap>命名模板</span>
+   <input type=text name=template id=tpl value="__TPL__" maxlength=120
+    placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称">
+   <div class=chips>
+    <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
+    <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
+    <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
+    <button type=button class="btn mini" onclick="insTpl('日期')">＋日期</button>
+   </div>
+  </div>
+  <div class=fld>
+   <span class=cap>单文件上限（MB，10–5000）</span>
+   <input type=number name=max_mb min=10 max=5000 value="__MAX_MB_CFG__">
+  </div>
+  <div class=fld>
+   <span class=cap>同时上传（个，1–100）</span>
+   <input type=number name=max_conc min=1 max=100 value="__MAX_CONC_CFG__">
+  </div>
+  <button type=submit class=cta style="width:100%;margin-top:4px;text-align:center;justify-content:center">保存设置</button>
+  <p class=note>
+   模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。
+   例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br>
+   <b>实时预览：</b><span id=tplPrev></span><br>
+   关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。<br>
+   单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
+ </form>
+</div>
+
 </div>
 __WARN__
 <script>
@@ -1089,6 +1136,16 @@ function showTab(w){
 }
 bM.onclick=()=>showTab('manage');
 bU.onclick=()=>showTab('upload');
+// 右上角图标按钮: 公告栏 / 上传设置 弹出面板(点外面或✕关闭)
+const annFab=document.getElementById('annFab'),cfgFab=document.getElementById('cfgFab'),
+ annPop=document.getElementById('annPop'),cfgPop=document.getElementById('cfgPop');
+function closePop(w){(w==='ann'?annPop:cfgPop).classList.remove('on');}
+annFab.onclick=e=>{e.stopPropagation();cfgPop.classList.remove('on');annPop.classList.toggle('on');};
+cfgFab.onclick=e=>{e.stopPropagation();annPop.classList.remove('on');cfgPop.classList.toggle('on');};
+document.addEventListener('click',e=>{
+ if(!e.target.closest('.pop')&&!e.target.closest('.fab')){
+  annPop.classList.remove('on');cfgPop.classList.remove('on');}});
+
 // 命名模板: 元素快捷插入 + 实时预览(与服务端 render_template 逻辑一致)
 const tplIn=document.getElementById('tpl'),tplPrev=document.getElementById('tplPrev');
 function insTpl(k){tplIn.value+=k;updTpl();tplIn.focus();}
@@ -1616,7 +1673,7 @@ def admin_normalize():
     if not enabled:
         note = ('<br><span style="color:#b8860b">⚠️ 自动规范化已在管理页关闭</span>')
         warnbox = ('<div class=warnbox>⚠️ <b>「名单识别与自动规范化」当前是关闭状态。</b>'
-                   '回到管理页的「⚙️ 上传设置」打开开关即可——打开后上传的文件会按命名模板'
+                   '点管理页右上角的 ⚙️ 按钮打开开关即可——打开后上传的文件会按命名模板'
                    '自动改名，这里也能批量处理历史文件。'
                    '（关闭不影响「作业核对」功能。）</div>')
         gobtn = ""
@@ -1629,7 +1686,7 @@ def admin_normalize():
     else:
         note = ""
         warnbox = ('<div class=warnbox>⚠️ <b>此操作会真正重命名文件，不可撤销。</b>'
-                   '请核对上面的清单——按管理页「⚙️ 上传设置」里的命名模板生成；'
+                   '请核对上面的清单——按管理页右上角 ⚙️ 里的命名模板生成；'
                    '认不出是谁的、命中多个姓名的（如小组作业）会保持原样，列在下方「保持不变」里。</div>')
         gobtn = (f'<a class=cta href="/admin/normalize/run?token={ADMIN_TOKEN}'
                  f'&folder={quote(folder)}" onclick="return confirm(\'确认执行这 '
