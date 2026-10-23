@@ -21,7 +21,7 @@ if not os.path.exists(TOKEN_FILE):
 ADMIN_TOKEN = open(TOKEN_FILE).read().strip()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = None  # 服务端不限制大小
 
 def split_names(txt: str):
     """名单文本按行解析为姓名列表(兼容旧格式, 仅取姓名)。
@@ -83,8 +83,17 @@ def save_announcement(text: str):
                    "time": time.strftime("%Y-%m-%d %H:%M")}, f,
                   ensure_ascii=False)
 
-# ---------- 上传配置(开关 + 命名模板) ----------
-DEFAULT_CONFIG = {"normalize": True, "template": "学号 姓名"}
+# ---------- 上传配置(开关 + 命名模板 + 客户端上限) ----------
+def _clamp(v, lo, hi, default):
+    """把配置值限制在 [lo, hi]; 非法回退默认"""
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, v))
+
+DEFAULT_CONFIG = {"normalize": True, "template": "学号 姓名",
+                  "max_mb": 200, "max_conc": 20}
 TPL_KEYWORDS = ("姓名", "学号", "文件名称", "日期")
 
 def load_config():
@@ -95,8 +104,12 @@ def load_config():
         if isinstance(data, dict):
             if "normalize" in data:
                 cfg["normalize"] = bool(data["normalize"])
-            if isinstance(data.get("template"), str):
+            if isinstance(data.get("template"), str) and data["template"].strip():
                 cfg["template"] = data["template"]
+            if "max_mb" in data:
+                cfg["max_mb"] = _clamp(data["max_mb"], 10, 5000, cfg["max_mb"])
+            if "max_conc" in data:
+                cfg["max_conc"] = _clamp(data["max_conc"], 1, 100, cfg["max_conc"])
     except (OSError, ValueError):
         pass
     return cfg
@@ -104,7 +117,9 @@ def load_config():
 def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump({"normalize": bool(cfg.get("normalize")),
-                   "template": str(cfg.get("template") or DEFAULT_CONFIG["template"])},
+                   "template": str(cfg.get("template") or DEFAULT_CONFIG["template"]),
+                   "max_mb": _clamp(cfg.get("max_mb"), 10, 5000, DEFAULT_CONFIG["max_mb"]),
+                   "max_conc": _clamp(cfg.get("max_conc"), 1, 100, DEFAULT_CONFIG["max_conc"])},
                   f, ensure_ascii=False)
 
 def today_str() -> str:
@@ -274,11 +289,6 @@ def fmt_sz(sz: int) -> str:
     if sz >= 1024 * 1024:
         return f"{sz / 1048576:.1f} MB"
     return f"{sz / 1024:.0f} KB"
-
-def dir_size() -> int:
-    return sum(os.path.getsize(os.path.join(UPLOAD_DIR, fn))
-               for fn in os.listdir(UPLOAD_DIR)
-               if os.path.isfile(os.path.join(UPLOAD_DIR, fn)))
 
 def list_folders():
     """自定义文件夹 = uploads/ 下一级子目录(根目录视为'未分类', 不在此列)"""
@@ -480,7 +490,7 @@ __ANNOUNCE__
 <div class="glass drop" id=drop>
  <div class=ico>📂</div>
  <b>点击选择文件（可多选）</b>
- <small>或拖拽文件到此处 · 单个 ≤ 200MB · 一次 ≤ 20 个</small>
+ <small>__LIMIT_HINT__</small>
 </div>
 <input type=file id=pick accept="*/*" multiple>
 <div class="glass flist" id=flist></div>
@@ -531,7 +541,8 @@ const drop=document.getElementById('drop'),pick=document.getElementById('pick'),
  dupCancel=document.getElementById('dupCancel'),
  smallmask=document.getElementById('smallmask'),smalllist=document.getElementById('smalllist'),
  smallOk=document.getElementById('smallOk'),smallCancel=document.getElementById('smallCancel');
-const MAX_SIZE=200*1024*1024, MAX_FILES=20, MAX_TOTAL=500*1024*1024;
+const MAX_MB=__MAX_MB__, MAX_CONC=__MAX_CONC__, MAX_FILES=20;
+const MAX_SIZE=MAX_MB*1024*1024, MAX_TOTAL=MAX_SIZE*MAX_FILES;
 const BLOCKED=['exe','bat','cmd','com','scr','msi','apk','jar','vbs','ps1','sh','dll','so'];
 let queue=[],seq=0,running=0,canceled=false,started=false;
 function fmt(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' KB'}
@@ -552,7 +563,7 @@ function addFiles(list){
   if(queue.length>=MAX_FILES){msg.textContent='一次最多提交 '+MAX_FILES+' 个文件';msg.className='msg err';break;}
   const e=extOf(f.name);
   if(BLOCKED.includes(e)){queue.push(mk(f,'error','不支持的文件类型：.'+e));reject++;continue;}
-  if(f.size>MAX_SIZE){queue.push(mk(f,'error','单个文件超过 200MB 限制'));reject++;continue;}
+  if(f.size>MAX_SIZE){queue.push(mk(f,'error','单个文件超过 '+MAX_MB+'MB 限制'));reject++;continue;}
   if(totalBytes()+f.size>MAX_TOTAL){queue.push(mk(f,'error','全部文件总大小超过 500MB 限制'));reject++;continue;}
   if(queue.some(t=>t.file.name===f.name&&t.file.size===f.size&&t.status!=='error')){
    queue.push(mk(f,'error','与列表中已有文件重复'));continue;}
@@ -656,7 +667,7 @@ go.onclick=()=>{
    started=true;canceled=false;render();tick();
   });
  });};
-function conc(){return queue.length}  /* 拖几个就同时传几个, 不限并发 */
+function conc(){return MAX_CONC}  /* 管理员配置的同时上传数(1-100) */
 function tick(){
  if(canceled)return;
  while(running<conc()){
@@ -738,7 +749,14 @@ def index_html() -> str:
                     f'<p>{html.escape(ann["text"])}</p></div>')
     else:
         announce = ""
-    return INDEX_TPL.replace("__FOLDERS__", opts).replace("__ANNOUNCE__", announce)
+    cfg = load_config()
+    limit_hint = (f"或拖拽文件到此处 · 单个 ≤ {cfg['max_mb']}MB · "
+                  f"一批 ≤ 20 个 · 同时传 {cfg['max_conc']} 个")
+    return (INDEX_TPL.replace("__FOLDERS__", opts)
+            .replace("__ANNOUNCE__", announce)
+            .replace("__LIMIT_HINT__", limit_hint)
+            .replace("__MAX_MB__", str(cfg["max_mb"]))
+            .replace("__MAX_CONC__", str(cfg["max_conc"])))
 
 @app.get("/")
 def index():
@@ -749,8 +767,6 @@ def upload():
     f = request.files.get("file")
     if not f or not f.filename:
         abort(400, "没有文件")
-    if dir_size() > 2 * 1024**3:
-        abort(507, "空间已满")
     # 目标文件夹: 必须是已存在的文件夹, 防穿越; 不允许未分类(根目录)
     folder = (request.form.get("folder") or "").strip()[:32]
     if not folder:
@@ -979,11 +995,22 @@ __DL_FOLDER_OPTS__
    </span>
    <button type=submit class=cta style="font-size:14px;padding:10px 18px">保存设置</button>
   </div>
+  <div class=bar style="margin-top:10px">
+   <span class=lbl>单文件上限</span>
+   <input type=number name=max_mb min=10 max=5000 value="__MAX_MB_CFG__"
+    style="width:110px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
+   <span class=lbl>MB（10–5000）</span>
+   <span class=lbl>同时上传</span>
+   <input type=number name=max_conc min=1 max=100 value="__MAX_CONC_CFG__"
+    style="width:90px;font-family:inherit;font-size:14px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none">
+   <span class=lbl>个（1–100）</span>
+  </div>
   <p style="font-size:12.5px;color:#8a97ab;margin-top:10px;line-height:1.8">
    模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。
    例：输入「姓名_学号 文件名称」→「张三_17 example」；输入「学号-姓名-文件名称」→「17-张三-example」。<br>
    <b>实时预览：</b><span id=tplPrev style="color:#31405e;font-weight:700"></span><br>
-   关闭开关后：上传文件保持原样（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。</p>
+   关闭开关后：上传文件保持原样（同名仍自动加 (1) 防覆盖），查重弹窗和自动改名停用；「作业核对」不受影响。<br>
+   「单文件上限 / 同时上传」只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
  </form>
 </section>
 
@@ -1328,6 +1355,8 @@ def admin():
             .replace("__ROSTER_STATUS__", roster_status)
             .replace("__NORMON__", " checked" if load_config().get("normalize") else "")
             .replace("__TPL__", html.escape(load_config()["template"]))
+            .replace("__MAX_MB_CFG__", str(load_config()["max_mb"]))
+            .replace("__MAX_CONC_CFG__", str(load_config()["max_conc"]))
             .replace("__ANNOUNCE_TEXT__", html.escape(ann_text))
             .replace("__ANNOUNCE_STATUS__", ann_status)
             .replace("__WARN__", warn_js)
@@ -1433,6 +1462,8 @@ def admin_settings():
     tpl = (request.form.get("template") or "").strip()[:120]
     if template_valid(tpl):
         cfg["template"] = tpl
+    cfg["max_mb"] = _clamp(request.form.get("max_mb"), 10, 5000, cfg["max_mb"])
+    cfg["max_conc"] = _clamp(request.form.get("max_conc"), 1, 100, cfg["max_conc"])
     # 模板非法时保留原模板, 仅切换开关
     save_config(cfg)
     folder = norm_folder(request.form.get("folder"))
