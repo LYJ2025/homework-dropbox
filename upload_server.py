@@ -479,6 +479,9 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
  border-radius:12px;padding:11px 14px}
 .mtip.show{display:block}
 .mtip b{font-weight:800}
+.mtip .cpbtn{margin-top:9px;display:inline-block;font-family:inherit;font-size:13px;
+ font-weight:800;color:#fff;border:none;border-radius:10px;padding:8px 15px;cursor:pointer;
+ background:linear-gradient(135deg,#4f7cff,#8a5cff)}
 @media(max-width:600px){
  body{padding:14px 10px}
  .wrap{max-width:100%}
@@ -562,9 +565,10 @@ function totalBytes(){return queue.reduce((s,t)=>s+t.file.size,0)}
 function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error'?t.file.size:(t.status==='uploading'?t.file.size*t.pct/100:0)),0)}
 drop.onclick=()=>pick.click();
 pick.onchange=()=>{addFiles(pick.files);pick.value='';};
-// 移动端环境提示: 告诉同学如何在微信/QQ 里直接从聊天记录选文件
-// (安卓微信 WebView 的文件选择器自带「从微信聊天记录选择文件」→ 即截图里的选聊天界面;
-//  该选项由微信控制, 网页无法直接唤起, 只能引导用户去点)
+// 移动端环境提示: 引导同学用正确方式选文件
+// 真相: 系统「选择要使用的应用」弹窗只列「已注册为文件来源」的 App;
+// 微信/QQ 没有向安卓注册该能力, 所以【外部浏览器】里永远看不到它们, 网页无权添加。
+// 只有【在微信内置浏览器】里打开本页, 点文件框才会出现「从微信聊天记录选择文件」。
 (function(){
  const ua=navigator.userAgent||'';
  const isWX=/MicroMessenger/i.test(ua);
@@ -573,15 +577,27 @@ pick.onchange=()=>{addFiles(pick.files);pick.value='';};
  const tip=document.getElementById('mtip');
  let h='';
  if(isWX&&/Android/i.test(ua)){
-  h='📱 <b>微信内上传</b>：点上方「选择文件」，在弹出的菜单里选 <b>「从微信聊天记录选择文件」</b>（部分版本叫「聊天文件」），就能直接挑聊天里收到的作业。';
+  h='📱 <b>微信内上传</b>：点上方「选择文件」，在弹出菜单里选 <b>「从微信聊天记录选择文件」</b>（部分版本叫「聊天文件」），就能直接挑聊天里收到的作业。';
  }else if(isWX){
   h='📱 <b>微信内上传</b>：若菜单里没有「从聊天记录选择」，请先把文件在微信里<b>保存到手机</b>，再点「选择文件」→「选取文件」上传。';
  }else if(isQQ){
-  h='📱 <b>QQ 内上传</b>：点上方「选择文件」，选 <b>「从聊天记录选择」</b>；没有该选项时，先把文件保存到手机再选。';
+  h='📱 <b>QQ 内上传</b>：点上方「选择文件」，菜单里若有 <b>「从聊天记录选择」</b> 就选它；没有的话先把文件保存到手机再选。';
  }else if(isMob){
-  h='📱 <b>手机上传</b>：可直接从相册、手机文件或聊天记录里选择。';
+  h='📱 <b>这里是普通浏览器</b>：只能从相册/手机文件选，<b>不会出现微信/QQ</b>——系统弹窗只列「已注册为文件来源」的应用，微信/QQ 没有这个能力，网页也无法加进去。<br>想直接从聊天记录选文件：把本页链接发到 <b>微信/QQ 里打开</b>即可。<br><button class=cpbtn id=cpbtn>📋 复制本页链接</button>';
  }
  if(h){tip.innerHTML=h;tip.classList.add('show');}
+ const cb=document.getElementById('cpbtn');
+ if(cb){cb.onclick=function(){
+  const url=location.href, btn=cb;
+  const ok=()=>{btn.textContent='✅ 已复制，去微信/QQ 里粘贴打开';};
+  const fb=()=>{const t=document.createElement('textarea');t.value=url;
+   t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();
+   try{document.execCommand('copy');ok();}catch(e){prompt('长按复制链接：',url);}
+   document.body.removeChild(t);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+   navigator.clipboard.writeText(url).then(ok).catch(fb);
+  }else fb();
+ };}
 })();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
 drop.ondragleave=()=>drop.classList.remove('on');
