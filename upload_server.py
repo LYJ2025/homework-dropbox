@@ -693,8 +693,7 @@ function send(t){
    try{const r=JSON.parse(xhr.responseText);
     t.status=(r.status==='skipped')?'skipped':'done';t.msg='';
    }catch(e){t.status='done';}
-  }else if(xhr.status===413){t.status='error';t.msg='文件超过服务器 100MB 限制';}
-  else if(xhr.status===507){t.status='error';t.msg='服务器空间已满，请联系管理员';}
+  }else if(xhr.status===413){t.status='error';t.msg='文件过大，服务器拒绝接收';}
   else if(xhr.status===400){t.status='error';t.msg='服务器拒绝该文件（如文件夹不存在）';}
   else{t.status='error';t.msg='服务器错误 ('+xhr.status+')';}
   render();tick();};
