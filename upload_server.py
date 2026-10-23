@@ -11,8 +11,8 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE, "uploads")
 TOKEN_FILE = os.path.join(BASE, ".admin_token")
 ROSTER_FILE = os.path.join(BASE, ".roster")
-CONFIG_FILE = os.path.join(BASE, ".upload_config")
 ANNOUNCE_FILE = os.path.join(BASE, ".announcement")
+CONFIG_FILE = os.path.join(BASE, ".upload_config")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -474,6 +474,11 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 .dupitem small{color:#a08a5a}
 .dlgbtns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .dlgbtns .cta,.dlgbtns .btn{flex:1;justify-content:center;text-align:center;min-width:120px}
+.mtip{display:none;font-size:13px;line-height:1.75;color:#2f57cc;margin-top:12px;
+ background:rgba(90,124,255,.09);border:1px solid rgba(90,124,255,.28);
+ border-radius:12px;padding:11px 14px}
+.mtip.show{display:block}
+.mtip b{font-weight:800}
 @media(max-width:600px){
  body{padding:14px 10px}
  .wrap{max-width:100%}
@@ -497,6 +502,7 @@ __ANNOUNCE__
  <small>__LIMIT_HINT__</small>
 </div>
 <input type=file id=pick accept="*/*" multiple>
+<p class=mtip id=mtip></p>
 <div class="glass flist" id=flist></div>
 <div class="glass total" id=total>
  <div class=trow><span class=lbl>总体进度</span><span class=cnt id=tcnt></span></div>
@@ -556,6 +562,27 @@ function totalBytes(){return queue.reduce((s,t)=>s+t.file.size,0)}
 function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error'?t.file.size:(t.status==='uploading'?t.file.size*t.pct/100:0)),0)}
 drop.onclick=()=>pick.click();
 pick.onchange=()=>{addFiles(pick.files);pick.value='';};
+// 移动端环境提示: 告诉同学如何在微信/QQ 里直接从聊天记录选文件
+// (安卓微信 WebView 的文件选择器自带「从微信聊天记录选择文件」→ 即截图里的选聊天界面;
+//  该选项由微信控制, 网页无法直接唤起, 只能引导用户去点)
+(function(){
+ const ua=navigator.userAgent||'';
+ const isWX=/MicroMessenger/i.test(ua);
+ const isQQ=/(QQBrowser|MQQBrowser)/i.test(ua)&&!isWX;
+ const isMob=/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+ const tip=document.getElementById('mtip');
+ let h='';
+ if(isWX&&/Android/i.test(ua)){
+  h='📱 <b>微信内上传</b>：点上方「选择文件」，在弹出的菜单里选 <b>「从微信聊天记录选择文件」</b>（部分版本叫「聊天文件」），就能直接挑聊天里收到的作业。';
+ }else if(isWX){
+  h='📱 <b>微信内上传</b>：若菜单里没有「从聊天记录选择」，请先把文件在微信里<b>保存到手机</b>，再点「选择文件」→「选取文件」上传。';
+ }else if(isQQ){
+  h='📱 <b>QQ 内上传</b>：点上方「选择文件」，选 <b>「从聊天记录选择」</b>；没有该选项时，先把文件保存到手机再选。';
+ }else if(isMob){
+  h='📱 <b>手机上传</b>：可直接从相册、手机文件或聊天记录里选择。';
+ }
+ if(h){tip.innerHTML=h;tip.classList.add('show');}
+})();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
 drop.ondragleave=()=>drop.classList.remove('on');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('on');addFiles(e.dataTransfer.files)};
@@ -809,7 +836,8 @@ def upload():
 @app.post("/upload/check")
 def upload_check():
     """上传前查重(同学端调用, 无需令牌): 该文件夹内是否已有「这个同学」的文件。
-    管理端关闭「名单识别与自动规范化」时一律返回不重复(退化为普通同名 (n) 行为)。"""
+    识别得出是谁时, 返回其已有文件列表(仅限对方名义上传的场景, 属已知取舍);
+    识别不出时退化为「精确同名」判断。"""
     if not load_config().get("recognize"):
         return Response(json.dumps({"dup": False}),
                         mimetype="application/json")
@@ -909,10 +937,6 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 @media(max-width:600px){
  .panel .numrow input{width:88px}
 }
-textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
- border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
- color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
-textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
 .fmgr{padding-top:18px;border-top:1px solid rgba(130,150,190,.28);margin-top:30px}
 .fmgr>.lbl{display:block;margin-bottom:10px}
 .fmgr-btns{display:flex;gap:10px;flex-wrap:wrap}
@@ -925,6 +949,10 @@ textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124
 #noteBtn{margin-top:16px}
 .hintbox{margin-top:12px}
 .hintbox-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:8px}
+textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
+ border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
+ color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
+textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .range{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .list{padding:0;overflow:hidden}
@@ -1263,7 +1291,7 @@ textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124
 <form method=post action=/admin/roster>
  <input type=hidden name=token value="__TOKEN__">
  <input type=hidden name=folder value="__FOLDER__">
- <div class="glass panel"><textarea name=names placeholder="每行一个同学，例如：&#10;张三 20260000000001&#10;20260000000002 李四">__NAMES__</textarea></div>
+ <div class="glass panel"><textarea name=names placeholder="每行一个同学，例如：&#10;张君凯 20261108100134&#10;20261108100135 张娟">__NAMES__</textarea></div>
  <div class=acts>
   <button type=submit class=cta>💾 保存名单</button>
   <a class=btn href="/admin?token=__TOKEN__&__BACK__">← 返回管理页</a>
@@ -1537,6 +1565,23 @@ def admin_announcement():
     folder = norm_folder(request.form.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
+@app.post("/admin/settings")
+def admin_settings():
+    """保存上传设置: 自动规范化开关 + 命名模板 + 客户端上限"""
+    if not is_admin():
+        abort(401)
+    cfg = load_config()
+    cfg["recognize"] = (request.form.get("recognize") == "1")
+    cfg["normalize"] = (request.form.get("normalize") == "1") and cfg["recognize"]
+    tpl = (request.form.get("template") or "").strip()[:120]
+    if template_valid(tpl):
+        cfg["template"] = tpl
+    cfg["max_mb"] = _clamp(request.form.get("max_mb"), 10, 5000, cfg["max_mb"])
+    cfg["max_conc"] = _clamp(request.form.get("max_conc"), 1, 100, cfg["max_conc"])
+    save_config(cfg)
+    folder = norm_folder(request.form.get("folder"))
+    return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
+
 @app.get("/admin/folder/add")
 def folder_add():
     if not is_admin():
@@ -1597,24 +1642,6 @@ def admin_roster_save():
     pairs = parse_roster(request.form.get("names") or "")
     with open(ROSTER_FILE, "w") as f:
         f.write("\n".join(f"{n}\t{s}" if s else n for n, s in pairs))
-    folder = norm_folder(request.form.get("folder"))
-    return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
-
-@app.post("/admin/settings")
-def admin_settings():
-    """保存上传设置: 自动规范化开关 + 命名模板"""
-    if not is_admin():
-        abort(401)
-    cfg = load_config()
-    cfg["recognize"] = (request.form.get("recognize") == "1")
-    cfg["normalize"] = (request.form.get("normalize") == "1") and cfg["recognize"]
-    tpl = (request.form.get("template") or "").strip()[:120]
-    if template_valid(tpl):
-        cfg["template"] = tpl
-    cfg["max_mb"] = _clamp(request.form.get("max_mb"), 10, 5000, cfg["max_mb"])
-    cfg["max_conc"] = _clamp(request.form.get("max_conc"), 1, 100, cfg["max_conc"])
-    # 模板非法时保留原模板, 仅切换开关
-    save_config(cfg)
     folder = norm_folder(request.form.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
@@ -1737,11 +1764,11 @@ def admin_normalize():
         abort(401)
     folder = norm_folder(request.args.get("folder"))
     pairs = load_roster_pairs()
-    cfg = load_config()
     fdesc = {"all": "全部文件夹", "__root__": "未分类"}.get(folder, folder)
     scope = f"范围：文件夹「{html.escape(fdesc)}」"
     has_ids = any(sid for _, sid in pairs)
-    enabled = cfg.get("normalize") and cfg.get("recognize")
+    cfg_pre = load_config()
+    enabled = cfg_pre.get("normalize") and cfg_pre.get("recognize")
     ren, skip = [], []
     if enabled and has_ids:
         for rel, fn, p in folder_files(folder):
@@ -1852,23 +1879,9 @@ def admin_delete(rel):
     folder = norm_folder(request.args.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
-def ensure_cert():
-    """确保证书存在: 没有就现场生成一张自签名证书(10年), 让项目开箱即用"""
-    cert = os.path.join(BASE, "cert.pem")
-    key = os.path.join(BASE, "key.pem")
-    if not (os.path.exists(cert) and os.path.exists(key)):
-        import subprocess
-        subprocess.run(
-            ["openssl", "req", "-x509", "-newkey", "rsa:2048",
-             "-keyout", key, "-out", cert, "-days", "3650", "-nodes",
-             "-subj", "/CN=localhost"],
-            check=True)
-        print("已生成自签名证书 cert.pem / key.pem（浏览器首次访问需手动信任）")
-    return cert, key
-
 if __name__ == "__main__":
     import ssl
-    cert, key = ensure_cert()
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain(cert, key)
+    ctx.load_cert_chain("/Users/zjk/nextcloud-drop/cert.pem",
+                        "/Users/zjk/nextcloud-drop/key.pem")
     app.run(host="0.0.0.0", port=8080, debug=False, ssl_context=ctx)
