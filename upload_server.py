@@ -864,15 +864,25 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
  box-shadow:0 8px 22px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
 .upframe{width:100%;height:calc(100vh - 215px);min-height:620px;border:none;background:transparent;display:block}
 
-/* ===== 四个TAB / 设置页控件 ===== */
-.tabs .tab{font-size:14px;padding:12px 6px}
-.tabs .tab .tic{display:block;font-size:17px;margin-bottom:2px}
+/* ===== 顶部: 标题+两个小图标按钮(公告栏/设置) + 双TAB ===== */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+ margin-bottom:14px;position:relative;z-index:1}
+.topbar h1{margin-bottom:0}
+.ticbtns{display:flex;gap:8px;flex-shrink:0}
+.ticbtn{width:42px;height:42px;border:none;cursor:pointer;border-radius:12px;font-size:19px;
+ color:#3a5bcc;background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.85);
+ box-shadow:0 3px 10px rgba(31,45,80,.10);transition:.2s;
+ display:flex;align-items:center;justify-content:center}
+.ticbtn:hover{background:rgba(255,255,255,.85);transform:translateY(-1px)}
+.ticbtn:active{transform:translateY(0)}
+.ticbtn.on{color:#fff;background:linear-gradient(135deg,#4f7cff,#7a5cff);border-color:transparent;
+ box-shadow:0 6px 16px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
 .sub2{font-size:13px;color:#8a97ab;line-height:1.8;margin-bottom:14px}
 .panel .sw{margin:10px 0}
 .panel .sw label{display:flex;align-items:center;gap:9px;cursor:pointer;
  font-size:14px;font-weight:700;color:#31405e;line-height:1.5}
 .panel .sw input{width:18px;height:18px;cursor:pointer;accent-color:#4f7cff;flex-shrink:0}
-.panel .sw input:disabled+span,.panel .sw label:has(input:disabled){opacity:.45;cursor:not-allowed}
+.panel .sw label:has(input:disabled){opacity:.45;cursor:not-allowed}
 .panel .fld{margin:16px 0}
 .panel .fld .cap{display:block;font-size:13px;font-weight:700;color:#5a6a81;margin-bottom:7px}
 .panel input[type=text],.panel input[type=number],.panel textarea{width:100%;font-family:inherit;
@@ -897,9 +907,8 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
  background:linear-gradient(transparent,rgba(255,255,255,.92))}
 #tplPrev{color:#31405e;font-weight:700}
 @media(max-width:600px){
- .tabs .tab{font-size:13px;padding:11px 4px}
- .tabs .tab .tic{font-size:16px}
  .panel .numrow input{width:88px}
+}
 }
 }
 textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
@@ -957,12 +966,17 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
-<h1>作业管理</h1>
+<div class=topbar>
+ <h1>作业管理</h1>
+ <div class=ticbtns>
+  <button type=button class=ticbtn id=btnAnn title="公告栏">📢</button>
+  <button type=button class=ticbtn id=btnCfg title="设置">⚙️</button>
+ </div>
+</div>
 <div class=tabs>
  <button type=button class="tab on" id=tabBtnManage>📋 文件管理</button>
  <button type=button class=tab id=tabBtnUpload>⬆️ 上传文件</button>
- <button type=button class=tab id=tabBtnAnn>📢 公告栏</button>
- <button type=button class=tab id=tabBtnCfg>⚙️ 设置</button>
+</div>
 
 <div id=tabManage>
 <section class="glass panel">
@@ -1134,22 +1148,24 @@ rform.onsubmit=e=>{
  }).catch(()=>{rbtn.disabled=false;
   alert('网络异常，无法确认文件数量，请重试');});
 };
-// 顶部TAB: 文件管理 / 上传文件 / 公告栏 / 设置(切页, 回管理页自动刷新)
+// 页面切换: TAB(文件管理/上传文件) + 标题右侧小按钮(公告栏/设置), 全部切页
 const tabManage=document.getElementById('tabManage'),tabUpload=document.getElementById('tabUpload'),
  tabAnn=document.getElementById('tabAnn'),tabCfg=document.getElementById('tabCfg'),
  bM=document.getElementById('tabBtnManage'),bU=document.getElementById('tabBtnUpload'),
- bA=document.getElementById('tabBtnAnn'),bC=document.getElementById('tabBtnCfg');
+ btnAnn=document.getElementById('btnAnn'),btnCfg=document.getElementById('btnCfg');
 function showTab(w){
- const map={manage:tabManage,upload:tabUpload,ann:tabAnn,cfg:tabCfg};
- const btns={manage:bM,upload:bU,ann:bA,cfg:bC};
- for(const k in map){map[k].style.display=(k===w)?'block':'none';
-  btns[k].classList.toggle('on',k===w);}
+ const pages={manage:tabManage,upload:tabUpload,ann:tabAnn,cfg:tabCfg};
+ for(const k in pages){pages[k].style.display=(k===w)?'block':'none';}
+ bM.classList.toggle('on',w==='manage');
+ bU.classList.toggle('on',w==='upload');
+ btnAnn.classList.toggle('on',w==='ann');
+ btnCfg.classList.toggle('on',w==='cfg');
  if(w==='manage')location.reload();  // 切回管理页时刷新, 看到最新文件
 }
 bM.onclick=()=>showTab('manage');
 bU.onclick=()=>showTab('upload');
-bA.onclick=()=>showTab('ann');
-bC.onclick=()=>showTab('cfg');
+btnAnn.onclick=()=>showTab('ann');
+btnCfg.onclick=()=>showTab('cfg');
 // 设置页: 名单识别关 → 自动规范化 checkbox 禁用(规范化依赖识别)
 const recOn=document.getElementById('recOn'),normOn=document.getElementById('normOn');
 if(recOn&&normOn){
