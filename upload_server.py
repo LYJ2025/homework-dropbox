@@ -915,15 +915,16 @@ textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:1
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
  color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
 textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
-.fmgr{padding-top:16px;border-top:1px solid rgba(255,255,255,.6);margin-top:22px}
+.fmgr{padding-top:18px;border-top:1px solid rgba(130,150,190,.28);margin-top:30px}
 .fmgr>.lbl{display:block;margin-bottom:10px}
 .fmgr-btns{display:flex;gap:10px;flex-wrap:wrap}
-.fmgr-btns .btn{flex:1;min-width:92px;justify-content:center;text-align:center}
+.fmgr-btns .btn{flex:1;min-width:92px;justify-content:center;text-align:center;padding:12px 10px}
 .fmgr-btns .btn.armed{background:rgba(255,120,100,.22);color:#c0392b;
  border-color:rgba(255,120,100,.5);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.75}}
 .stackbtn{display:flex;flex-direction:column;gap:10px}
 .stackbtn .btn{justify-content:center;text-align:center;padding:13px 16px;width:100%;box-sizing:border-box}
+#noteBtn{margin-top:16px}
 .hintbox{margin-top:12px}
 .hintbox-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:8px}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
@@ -963,8 +964,6 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
  .bar form .lbl{margin-bottom:-3px}
  .bar form button{width:100%;justify-content:center}
  .bar>a.btn{justify-content:center;text-align:center;padding:12px 0}
- .fmgr .btn{justify-content:center;padding:12px 0}
- .fmgr .hint{width:100%;text-align:center}
  .range{flex-direction:column;align-items:stretch}
  .range .lbl{margin-bottom:-3px}
  .range input[type=date]{width:100%}
