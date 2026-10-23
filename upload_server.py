@@ -922,11 +922,8 @@ textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124
 .fmgr-btns .btn.armed{background:rgba(255,120,100,.22);color:#c0392b;
  border-color:rgba(255,120,100,.5);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.75}}
-.hintbox{margin-top:10px}
-.hintbox .hb-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:6px}
-.hintbox .hb-text.clamp{max-height:23px;overflow:hidden;position:relative}
-.hintbox .hb-text.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:16px;
- background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,1))}
+.hintbox{margin-top:12px}
+.hintbox-text{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-bottom:8px}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .range{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .list{padding:0;overflow:hidden}
@@ -964,7 +961,6 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
  .bar form .lbl{margin-bottom:-3px}
  .bar form button{width:100%;justify-content:center}
  .bar>a.btn{justify-content:center;text-align:center;padding:12px 0}
- .fmgr{flex-direction:column;align-items:stretch;gap:8px}
  .fmgr .btn{justify-content:center;padding:12px 0}
  .fmgr .hint{width:100%;text-align:center}
  .range{flex-direction:column;align-items:stretch}
@@ -979,6 +975,7 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <div class=topbar>
  <h1>作业管理</h1>
  <div class=ticbtns>
+__CHECK_ICON__
   <button type=button class=ticbtn id=btnAnn title="公告栏">📢</button>
   <button type=button class=ticbtn id=btnCfg title="设置">⚙️</button>
  </div>
@@ -1000,7 +997,6 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 __FOLDER_OPTS__
    </select>
   </form>
-  <a class=btn href="/admin?token=__TOKEN__">显示全部</a>
  </div>
  <div class=fmgr>
   <span class=lbl>🗂 文件夹管理（对当前筛选的文件夹生效）</span>
@@ -1010,8 +1006,8 @@ __FOLDER_OPTS__
    <button type=button class="btn mini danger" id=delBtn onclick="delFolder()">🗑 删除</button>
   </div>
   <div class=hintbox>
-   <p class="hb-text clamp" id=hbFmgr>重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</p>
-   <button type=button class="btn mini" onclick="toggleHb('hbFmgr',this)">展开 ▾</button>
+   <p class=hintbox-text id=hbFmgr style="display:none">重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</p>
+   <button type=button class="btn mini" onclick="toggleHb('hbFmgr',this)">展开说明 ▾</button>
   </div>
  </div>
 </section>
@@ -1036,11 +1032,10 @@ __DL_FOLDER_OPTS__
   <span class=lbl>应交名单：__ROSTER_STATUS__</span>
   <a class="btn mini" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__">📝 编辑名单</a>
 __NORM_BTN__
-__CHECK_BTN__
  </div>
  <div class=hintbox>
-  <p class="hb-text clamp" id=hbCheck>__CHECK_HINT__</p>
-  <button type=button class="btn mini" onclick="toggleHb('hbCheck',this)">展开 ▾</button>
+  <p class=hintbox-text id=hbCheck style="display:none">__CHECK_HINT__</p>
+  <button type=button class="btn mini" onclick="toggleHb('hbCheck',this)">展开说明 ▾</button>
  </div>
 </section>
 
@@ -1121,7 +1116,7 @@ __ROWS__
     </div>
    </div>
    <button type=submit class=cta style="width:100%;margin-top:6px;text-align:center;justify-content:center">保存设置</button>
-   <p class="note clamp" id=cfgNote>模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
+   <p class=note id=cfgNote style="display:none">模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>单文件上限 / 同时上传只限制<b>同学端</b>（服务端不限制大小与并发）；一批最多 20 个文件。</p>
    <button type=button class="btn mini" id=noteBtn onclick="toggleNote()">展开说明 ▾</button>
   </form>
  </section>
@@ -1162,11 +1157,12 @@ function delFolder(){
  // 第二步: 再弹窗确认(显示文件夹名, 防删错)
  if(confirm('删除文件夹「'+f+'」会连同其中所有文件一并删除，确定？'))goBack('delete',f);
 }
-// 提示文字 展开/缩回(通用)
+// 提示说明 展开/缩回(通用): 折叠时完全隐藏文字, 只露按钮
 function toggleHb(id,btn){
  const t=document.getElementById(id);
- const clamp=t.classList.toggle('clamp');
- btn.textContent=clamp?'展开 ▾':'缩回 ▴';
+ const show=(t.style.display==='none');
+ t.style.display=show?'block':'none';
+ btn.textContent=show?'缩回说明 ▴':'展开说明 ▾';
 }
 // 批量下载: 先 fetch 预检, 无文件就在当前页弹窗(不跳转不白屏), 有文件才触发下载
 const rform=document.getElementById('rform'),rbtn=document.getElementById('rbtn');
@@ -1209,8 +1205,9 @@ if(recOn&&normOn){
 // 说明文字 展开/缩回
 function toggleNote(){
  const n=document.getElementById('cfgNote'),b=document.getElementById('noteBtn');
- const clamp=n.classList.toggle('clamp');
- b.textContent=clamp?'展开说明 ▾':'缩回说明 ▴';
+ const show=(n.style.display==='none');
+ n.style.display=show?'block':'none';
+ b.textContent=show?'缩回说明 ▴':'展开说明 ▾';
 }
 
 
@@ -1452,7 +1449,7 @@ def admin():
             fdesc = {"__root__": "未分类"}.get(folder, folder)
             rows = ('<div class=empty>🔍 当前文件夹下暂无文件<br>'
                     '<small style="color:#a5b0c2">筛选条件：文件夹 = ' + html.escape(fdesc)
-                    + '<br>文件并未丢失，点击上方「显示全部」即可查看所有文件</small></div>')
+                    + '<br>文件并未丢失，在「文件夹」下拉里选「全部文件夹」即可查看所有文件</small></div>')
         else:
             rows = "<div class=empty>这里空空如也，还没有任何文件</div>"
     fp = {"all": ("", ""), "__root__": ("📥 未分类", "pill folder")}.get(
@@ -1479,25 +1476,27 @@ def admin():
     _norm = _cfg.get("normalize", True) and _rec
     norm_btn = (f'  <a class="btn mini" href="/admin/normalize?token={ADMIN_TOKEN}'
                 f'&folder={quote(folder)}">🔧 规范文件名</a>' if _norm else '')
-    check_btn = (f'  <a class=cta style="font-size:14px;padding:10px 18px" '
-                 f'href="/admin/check?token={ADMIN_TOKEN}&folder={quote(folder)}">🔍 开始核对</a>'
-                 if _rec else '')
+    check_icon = (f'<button type=button class=ticbtn id=btnCheck title="作业核对" '
+                  f'onclick="location=\'/admin/check?token={ADMIN_TOKEN}'
+                  f'&folder={quote(folder)}\'">🔍</button>'
+                  if _rec else '')
     if not _rec:
-        check_hint = ('名单识别已在「⚙️ 设置」里关闭——开启后此处显示核对入口，'
-                      '同学上传时也不再弹出重复提交提示。')
+        check_hint = ('名单识别已在「⚙️ 设置」里关闭——开启后右上角出现 🔍 核对入口，'
+                      '同学上传时也才有重复提交提示。')
     elif not _norm:
         check_hint = ('按当前筛选的文件夹核对谁没交；自动规范化已关闭（上传的文件保持原名，'
                       '同名加 (1)），所以在「⚙️ 设置」里开启后才有「规范文件名」批量入口。')
     else:
-        check_hint = ('按当前筛选的文件夹核对谁没交；同学上传后若识别出是谁（且名单有其学号），'
-                      '文件会按命名模板自动改名，「🔧 规范文件名」可批量处理历史文件')
+        check_hint = ('点右上角 🔍 图标查看当前文件夹的核对报告（谁没交/已交明细）；'
+                      '同学上传后若识别出是谁（且名单有其学号），文件会按命名模板自动改名，'
+                      '「🔧 规范文件名」可批量处理历史文件')
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
             .replace("__RECON__", " checked" if _cfg.get("recognize") else "")
             .replace("__NORMON__", " checked" if _cfg.get("normalize") else "")
             .replace("__NORM_BTN__", norm_btn)
-            .replace("__CHECK_BTN__", check_btn)
+            .replace("__CHECK_ICON__", check_icon)
             .replace("__CHECK_HINT__", check_hint)
             .replace("__TPL__", html.escape(load_config()["template"]))
             .replace("__MAX_MB_CFG__", str(load_config()["max_mb"]))
