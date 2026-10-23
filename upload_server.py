@@ -902,9 +902,9 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 .panel .popbtns .btn{flex:1;justify-content:center;text-align:center;font-size:14px;padding:12px 14px}
 .panel .note{font-size:12.5px;color:#8a97ab;line-height:1.9;margin-top:14px}
 .panel .note b{color:#5a6a81}
-.panel .note.clamp{max-height:46px;overflow:hidden;position:relative;margin-bottom:8px}
-.panel .note.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:26px;
- background:linear-gradient(transparent,rgba(255,255,255,.92))}
+.panel .note.clamp{max-height:26px;overflow:hidden;position:relative;margin-bottom:8px}
+.panel .note.clamp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:22px;
+ background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,1))}
 #tplPrev{color:#31405e;font-weight:700}
 @media(max-width:600px){
  .panel .numrow input{width:88px}
@@ -915,8 +915,12 @@ textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:1
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
  color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
 textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
-.fmgr{padding-top:12px;border-top:1px solid rgba(255,255,255,.6);margin-top:12px;
- display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fmgr{padding-top:12px;border-top:1px solid rgba(255,255,255,.6);margin-top:12px}
+.fmgr>.lbl{display:block;margin-bottom:10px}
+.fmgr-btns{display:flex;gap:10px;flex-wrap:wrap}
+.fmgr-btns .btn{flex:1;min-width:92px;justify-content:center;text-align:center}
+.fmgr .hint{display:block;width:100%;margin-top:10px;font-size:12.5px;color:#8a97ab;
+ font-weight:400;line-height:1.7}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .range{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .list{padding:0;overflow:hidden}
@@ -993,10 +997,12 @@ __FOLDER_OPTS__
   <a class=btn href="/admin?token=__TOKEN__">显示全部</a>
  </div>
  <div class=fmgr>
-  <span class=lbl>🗂 文件夹管理</span>
-  <button type=button class="btn mini" onclick="addFolder()">＋ 新建文件夹</button>
-  <button type=button class="btn mini" onclick="renFolder()">✏️ 重命名当前文件夹</button>
-  <button type=button class="btn mini danger" onclick="delFolder()">🗑 删除当前文件夹</button>
+  <span class=lbl>🗂 文件夹管理（对当前筛选的文件夹生效）</span>
+  <div class=fmgr-btns>
+   <button type=button class="btn mini" onclick="addFolder()">＋ 新建文件夹</button>
+   <button type=button class="btn mini" onclick="renFolder()">✏️ 重命名</button>
+   <button type=button class="btn mini danger" onclick="delFolder()">🗑 删除</button>
+  </div>
   <span class="lbl hint">重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</span>
  </div>
 </section>
