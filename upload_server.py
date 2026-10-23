@@ -909,8 +909,6 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 @media(max-width:600px){
  .panel .numrow input{width:88px}
 }
-}
-}
 textarea{width:100%;font-family:inherit;font-size:14px;line-height:1.7;padding:12px;
  border-radius:12px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);
  color:#243049;outline:none;resize:vertical;box-shadow:inset 0 2px 6px rgba(31,45,80,.06)}
