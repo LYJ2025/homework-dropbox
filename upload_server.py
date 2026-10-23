@@ -21,7 +21,7 @@ if not os.path.exists(TOKEN_FILE):
 ADMIN_TOKEN = open(TOKEN_FILE).read().strip()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
 def split_names(txt: str):
     """名单文本按行解析为姓名列表(兼容旧格式, 仅取姓名)。
@@ -480,7 +480,7 @@ __ANNOUNCE__
 <div class="glass drop" id=drop>
  <div class=ico>📂</div>
  <b>点击选择文件（可多选）</b>
- <small>或拖拽文件到此处 · 单个 ≤ 100MB · 一次 ≤ 20 个</small>
+ <small>或拖拽文件到此处 · 单个 ≤ 200MB · 一次 ≤ 20 个</small>
 </div>
 <input type=file id=pick accept="*/*" multiple>
 <div class="glass flist" id=flist></div>
@@ -531,7 +531,7 @@ const drop=document.getElementById('drop'),pick=document.getElementById('pick'),
  dupCancel=document.getElementById('dupCancel'),
  smallmask=document.getElementById('smallmask'),smalllist=document.getElementById('smalllist'),
  smallOk=document.getElementById('smallOk'),smallCancel=document.getElementById('smallCancel');
-const MAX_SIZE=100*1024*1024, MAX_FILES=20, MAX_TOTAL=500*1024*1024;
+const MAX_SIZE=200*1024*1024, MAX_FILES=20, MAX_TOTAL=500*1024*1024;
 const BLOCKED=['exe','bat','cmd','com','scr','msi','apk','jar','vbs','ps1','sh','dll','so'];
 let queue=[],seq=0,running=0,canceled=false,started=false;
 function fmt(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' KB'}
@@ -552,7 +552,7 @@ function addFiles(list){
   if(queue.length>=MAX_FILES){msg.textContent='一次最多提交 '+MAX_FILES+' 个文件';msg.className='msg err';break;}
   const e=extOf(f.name);
   if(BLOCKED.includes(e)){queue.push(mk(f,'error','不支持的文件类型：.'+e));reject++;continue;}
-  if(f.size>MAX_SIZE){queue.push(mk(f,'error','单个文件超过 100MB 限制'));reject++;continue;}
+  if(f.size>MAX_SIZE){queue.push(mk(f,'error','单个文件超过 200MB 限制'));reject++;continue;}
   if(totalBytes()+f.size>MAX_TOTAL){queue.push(mk(f,'error','全部文件总大小超过 500MB 限制'));reject++;continue;}
   if(queue.some(t=>t.file.name===f.name&&t.file.size===f.size&&t.status!=='error')){
    queue.push(mk(f,'error','与列表中已有文件重复'));continue;}
