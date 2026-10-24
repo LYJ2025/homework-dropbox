@@ -421,7 +421,7 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
  box-shadow:0 8px 20px rgba(31,45,80,.13), inset 0 1px 0 #fff}
 .drop b{font-size:16px;color:#243049;display:block;margin-bottom:6px}
 .drop small{color:#71809b;font-size:13px}
-#pick,#pickimg{display:none}
+#pick{display:none}
 .flist{display:none;max-height:300px;overflow-y:auto;padding:8px;margin-top:14px}
 .flist::-webkit-scrollbar{width:8px}
 .flist::-webkit-scrollbar-thumb{background:rgba(120,140,180,.35);border-radius:99px}
@@ -475,9 +475,6 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 .dupitem small{color:#a08a5a}
 .dlgbtns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .dlgbtns .cta,.dlgbtns .btn{flex:1;justify-content:center;text-align:center;min-width:120px}
-.mobrow{display:none;margin-top:10px;text-align:center}
-.mobrow.show{display:block}
-.mobbtn{display:inline-flex;justify-content:center}
 @media(max-width:600px){
  body{padding:14px 10px}
  .wrap{max-width:100%}
@@ -502,8 +499,6 @@ __ANNOUNCE__
  <small>__LIMIT_HINT__</small>
 </div>
 <input type=file id=pick accept="*/*" multiple>
-<input type=file id=pickimg accept="image/*,video/*" multiple>
-<div class=mobrow id=mobrow><button class="btn mobbtn" id=imgbtn type=button>🖼 选图片 / 视频</button></div>
 <div class="glass flist" id=flist></div>
 <div class="glass total" id=total>
  <div class=trow><span class=lbl>总体进度</span><span class=cnt id=tcnt></span></div>
@@ -542,7 +537,6 @@ __ANNOUNCE__
 </div>
 <script>
 const drop=document.getElementById('drop'),pick=document.getElementById('pick'),
- pickimg=document.getElementById('pickimg'),imgbtn=document.getElementById('imgbtn'),
  go=document.getElementById('go'),flist=document.getElementById('flist'),
  fself=document.getElementById('folder'),totalBox=document.getElementById('total'),
  tbar=document.getElementById('tbar'),tcnt=document.getElementById('tcnt'),
@@ -564,15 +558,12 @@ function totalBytes(){return queue.reduce((s,t)=>s+t.file.size,0)}
 function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error'?t.file.size:(t.status==='uploading'?t.file.size*t.pct/100:0)),0)}
 drop.onclick=()=>pick.click();
 pick.onchange=()=>{addFiles(pick.files);pick.value='';};
-imgbtn.onclick=()=>pickimg.click();
-pickimg.onchange=()=>{addFiles(pickimg.files);pickimg.value='';};
 // 移动端: 部分浏览器把 accept="*/*" 当成"无限制"后只给相机/相册, 没有「文件」。
 // 改成明确的文档类型后系统才会出现「文件」入口; 图片/视频走单独按钮。
 (function(){
  if(!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||''))return;
  pick.setAttribute('accept',
-  '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml');
- document.getElementById('mobrow').classList.add('show');
+  '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml,.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a');
 })();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
 drop.ondragleave=()=>drop.classList.remove('on');
