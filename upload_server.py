@@ -1366,6 +1366,8 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .allok{text-align:center;font-weight:700;font-size:15px;padding:16px 0}
 .allok.g{color:#2e7d5b}.allok.b{color:#3a5bcc}
 .foot{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-top:6px}
+.backtop{position:fixed;top:16px;right:16px;z-index:30;
+ display:inline-flex;align-items:center;gap:6px;box-shadow:0 6px 18px rgba(31,45,80,.18)}
 @media(max-width:600px){
  body{padding:16px 12px 40px}
  h1{font-size:25px}
@@ -1377,6 +1379,7 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
+<a class="btn backtop" href="/admin?token=__TOKEN__&__BACK__">← 返回管理页</a>
 <h1>作业核对报告</h1>
 <p class=sub>核对范围：__SCOPE____NOTE__</p>
 
@@ -1406,9 +1409,6 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
  <p class=foot>无法识别 = 文件名里匹配不到任何名单姓名，可能是文件名漏写名字、写错名字，或名单外的人传的——需要你人工确认。</p>
 </section>
 
-<div class=acts style="display:flex;gap:10px;flex-wrap:wrap">
- <a class=btn href="/admin?token=__TOKEN__&__BACK__">← 返回管理页</a>
-</div>
 </div>
 </body></html>""")
 
