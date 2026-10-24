@@ -420,7 +420,7 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
  box-shadow:0 8px 20px rgba(31,45,80,.13), inset 0 1px 0 #fff}
 .drop b{font-size:16px;color:#243049;display:block;margin-bottom:6px}
 .drop small{color:#71809b;font-size:13px}
-#pick{display:none}
+#pick,#pickimg{display:none}
 .flist{display:none;max-height:300px;overflow-y:auto;padding:8px;margin-top:14px}
 .flist::-webkit-scrollbar{width:8px}
 .flist::-webkit-scrollbar-thumb{background:rgba(120,140,180,.35);border-radius:99px}
