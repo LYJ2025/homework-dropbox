@@ -1373,6 +1373,9 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .foot{font-size:12.5px;color:#8a97ab;line-height:1.8;margin-top:6px}
 .backtop{position:fixed;top:16px;right:16px;z-index:30;
  display:inline-flex;align-items:center;gap:6px;box-shadow:0 6px 18px rgba(31,45,80,.18)}
+.cfilter{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+.cfilter .lbl{font-size:13px;font-weight:700;color:#5a6a81}
+.cfilter select{min-width:200px;max-width:100%;font-size:14px}
 @media(max-width:600px){
  body{padding:16px 12px 40px}
  h1{font-size:25px}
@@ -1387,6 +1390,10 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <a class="btn backtop" href="/admin?token=__TOKEN__&__BACK__">← 返回管理页</a>
 <h1>作业核对报告</h1>
 <p class=sub>核对范围：__SCOPE____NOTE__</p>
+<div class=cfilter>
+ <span class=lbl>文件夹</span>
+ <select id=cfolder onchange="location='/admin/check?token=__TOKEN__&amp;folder='+encodeURIComponent(this.value)">__FOLDER_OPTS__</select>
+</div>
 
 <section class="glass panel">
  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/></svg>总览</h3>
@@ -1691,7 +1698,26 @@ def admin_check():
     """作业核对: 按当前文件夹比对名单, 输出已交/未交/无法识别"""
     if not is_admin():
         abort(401)
-    folder = norm_folder(request.args.get("folder"))
+    # 核对必须针对明确的单个文件夹: 不允许「全部文件夹 / 未分类」,
+    # 否则同一同学的多份作业会被算成重复提交。
+    folders = list_folders()
+    if not folders:
+        return no_store(Response(
+            "<!doctype html><meta charset=utf-8><script>alert("
+            + json.dumps("还没有任何文件夹，无法核对。请先在管理页新建文件夹并上传作业。")
+            + ");location='/admin?token=" + ADMIN_TOKEN + "';</script>",
+            mimetype="text/html"))
+    folder = request.args.get("folder") or ""
+    if folder not in folders:
+        # 默认落到「文件最多」的文件夹(通常就是当前这次作业), 避免落到空文件夹
+        def _fcnt(d):
+            try:
+                dd = os.path.join(UPLOAD_DIR, d)
+                return sum(1 for x in os.listdir(dd)
+                           if os.path.isfile(os.path.join(dd, x)))
+            except OSError:
+                return 0
+        folder = max(folders, key=lambda d: (_fcnt(d), d))
     roster = load_roster()
     if not roster:
         return no_store(Response(
@@ -1731,13 +1757,17 @@ def admin_check():
             for rel, fn in unknown)
     else:
         unkbox = '<div class="allok g">所有文件都能对应到名单中的同学</div>'
-    fdesc = {"all": "全部文件夹", "__root__": "未分类"}.get(folder, folder)
+    fdesc = folder
     scope = f"文件夹：{html.escape(fdesc)}"
+    fopts = "".join(
+        f'<option value="{html.escape(f)}"{" selected" if f == folder else ""}>'
+        f'{html.escape(f)}</option>' for f in folders)
     note = ('<br><span style="color:#b8860b;font-size:13px">⚠️ 当前文件夹下没有任何文件，因此所有人都计入未交</span>'
             if not files else "")
     page = (CHECK_TPL
             .replace("__SCOPE__", scope)
             .replace("__NOTE__", note)
+            .replace("__FOLDER_OPTS__", fopts)
             .replace("__N__", str(n))
             .replace("__OK__", str(ok))
             .replace("__MISS__", str(miss))
