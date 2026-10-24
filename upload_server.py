@@ -208,9 +208,10 @@ def recognize_student(fn: str, pairs):
     return hits[0], "ok"
 
 def student_files_in(target_dir: str, fn: str, pairs):
-    """target_dir 内与 fn 属于同一同学的所有文件路径(含 fn 自身);
-    识别不出是谁时退化为「精确同名」匹配。"""
+    """target_dir 内与 fn 同名(去后缀, 不区分大小写)或属于同一同学的所有文件路径。
+    替换时用: 同一个人的旧文件、以及同名不同后缀的文件都要清掉。"""
     who, _ = recognize_student(fn, pairs)
+    stem = os.path.splitext(fn)[0].strip().lower()
     out = []
     if not os.path.isdir(target_dir):
         return out
@@ -218,11 +219,12 @@ def student_files_in(target_dir: str, fn: str, pairs):
         fp = os.path.join(target_dir, f)
         if not os.path.isfile(fp):
             continue
+        same_stem = os.path.splitext(f)[0].strip().lower() == stem
+        same_person = False
         if who:
             w2, _ = recognize_student(f, pairs)
-            if w2 == who:
-                out.append(fp)
-        elif f == fn:
+            same_person = (w2 == who)
+        if same_stem or same_person:
             out.append(fp)
     return out
 
@@ -514,7 +516,7 @@ __ANNOUNCE__
 <div class=mask id=dupmask>
  <div class="glass dlg">
   <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 2.8 20h18.4Z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>检测到重复提交</h3>
-  <p class=dtext>文件夹「<b id=dupfolder></b>」里已经有这些同学的文件：</p>
+  <p class=dtext>文件夹「<b id=dupfolder></b>」里已经有同名（后缀可不同）或同一同学的文件：</p>
   <div class=duplist id=duplist></div>
   <p class=dtext>是否用新上传的文件<b>替换原文件</b>？<br>如果你传错了文件夹，请点「取消」，检查后再传。</p>
   <div class=dlgbtns>
@@ -858,12 +860,9 @@ def upload():
 
 @app.post("/upload/check")
 def upload_check():
-    """上传前查重(同学端调用, 无需令牌): 该文件夹内是否已有「这个同学」的文件。
-    识别得出是谁时, 返回其已有文件列表(仅限对方名义上传的场景, 属已知取舍);
-    识别不出时退化为「精确同名」判断。"""
-    if not load_config().get("recognize"):
-        return Response(json.dumps({"dup": False}),
-                        mimetype="application/json")
+    """上传前查重(同学端调用, 无需令牌)。
+    命中任一即弹窗: ①去掉后缀后的文件名相同(不区分大小写, 后缀可不同);
+    ②识别出是同一个同学(文件名不同也算)。"""
     folder = (request.form.get("folder") or "").strip()[:32]
     if folder:
         folder = safe_name(folder)
@@ -876,17 +875,22 @@ def upload_check():
         return Response(json.dumps({"dup": False}),
                         mimetype="application/json")
     pairs = load_roster_pairs()
-    who, _ = recognize_student(name, pairs)
+    who = None
+    if load_config().get("recognize"):
+        who, _ = recognize_student(name, pairs)
+    stem = os.path.splitext(name)[0].strip().lower()
     existing = []
-    if who and os.path.isdir(target):
-        # 只对「认得出是谁」的重复弹窗(替换/取消); 认不出是谁的同名文件不弹窗,
-        # 由上传时的 (n) 保底——避免不同同学传同名文件时互相覆盖
+    if os.path.isdir(target):
         for fn in os.listdir(target):
             fp = os.path.join(target, fn)
             if not os.path.isfile(fp):
                 continue
-            w2, _ = recognize_student(fn, pairs)
-            if w2 == who:
+            same_stem = os.path.splitext(fn)[0].strip().lower() == stem
+            same_person = False
+            if who:
+                w2, _ = recognize_student(fn, pairs)
+                same_person = (w2 == who)
+            if same_stem or same_person:
                 existing.append(fn)
     return Response(json.dumps({"dup": bool(existing),
                                 "student": who[0] if who else "",
