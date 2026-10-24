@@ -791,6 +791,34 @@ def index_html(embed: bool = False) -> str:
             .replace("__ADMIN_MODE__", admin_mode)
             .replace("__EMBED_CSS__", embed_css))
 
+def upload_pane_parts():
+    """把学生上传页拆成 (CSS, HTML, JS), 供管理页原生渲染(不再用 iframe)。
+    css : 去掉 body/h1/.sub/.wrap 等会污染管理页的规则
+    html: 去掉光斑与标题, 容器换成 #upPane
+    js  : 用管理端模式(不限大小/数量), 包进 IIFE 避免与后台脚本变量冲突"""
+    page = index_html(embed=True)
+    style = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    css = style.split(GLASS_CSS, 1)[1] if GLASS_CSS in style else ""
+    for pat in (r"body\{[^}]*\}", r"\.wrap\{[^}]*\}", r"h1\{[^}]*\}",
+                r"\.sub\{[^}]*\}"):
+        css = re.sub(pat, "", css, count=1)
+    css = re.sub(r"body\{[^}]*\}\s*\.wrap\{[^}]*\}\s*h1\{[^}]*\}", "", css)
+    for pat in (r"html,body\{background:transparent!important\}",
+                r"\.orb\{display:none!important\}",
+                r"body\{padding:0!important\}",
+                r"h1,\.sub\{display:none!important\}",
+                r"\.wrap\{max-width:100%!important\}",
+                r"\.drop small:empty\{display:none\}"):
+        css = re.sub(pat, "", css)
+    pre = page.split("<script>", 1)[0]
+    body = pre.split("</style>", 1)[1]
+    body = re.sub(r'<div class="orb [abc]"></div>', "", body)
+    body = re.sub(r"<h1>作业提交</h1>\s*<p class=sub>[^<]*</p>", "", body, count=1)
+    body = body.replace("<div class=wrap>", '<div id="upPane">', 1)
+    js = page.split("<script>", 1)[1].split("</script>", 1)[0]
+    js = "<script>(function(){" + js + "})();</script>"
+    return css, body, js
+
 @app.get("/")
 def index():
     embed = request.args.get("embed") == "1"
@@ -1005,6 +1033,13 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
  .range .cta{width:100%;text-align:center}
  .bar>a.cta{width:100%;text-align:center;justify-content:center;padding:12px 0}
 }
+/* ===== 上传面板(原生渲染, 与学生上传页同源 CSS, 已去掉 body/wrap 等全局规则) ===== */
+#upPane{display:flex;flex-direction:column;gap:18px}
+#upPane .announce,#upPane .tool,#upPane .flist,#upPane .total,#upPane .acts,#upPane .msg{margin-top:0;margin-bottom:0}
+#upPane .tool{padding:18px 20px}
+#upPane .drop{padding:34px 20px}
+#upPane .announce{padding:16px 20px}
+__UP_CSS__
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
@@ -1074,7 +1109,8 @@ __ROWS__
 </section>
 </div>
 <div id=tabUpload style="display:none">
- <iframe src="/?embed=1" class=upframe title="上传文件"></iframe>
+__UP_BODY__
+__UP_JS__
 </div>
 
 <div id=tabAnn style="display:none">
@@ -1526,6 +1562,7 @@ def admin():
         check_hint = ('点右上角的核对图标查看当前文件夹的核对报告（谁没交/已交明细）；'
                       '同学上传后若识别出是谁（且名单有其学号），文件会按命名模板自动改名，'
                       '「规范文件名」可批量处理历史文件')
+    up_css, up_body, up_js = upload_pane_parts()
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
@@ -1534,6 +1571,9 @@ def admin():
             .replace("__NORM_BTN__", norm_btn)
             .replace("__CHECK_ICON__", check_icon)
             .replace("__CHECK_HINT__", check_hint)
+            .replace("__UP_CSS__", up_css)
+            .replace("__UP_BODY__", up_body)
+            .replace("__UP_JS__", up_js)
             .replace("__TPL__", html.escape(load_config()["template"]))
             .replace("__MAX_MB_CFG__", str(load_config()["max_mb"]))
             .replace("__MAX_FILES_CFG__", str(load_config()["max_files"]))
