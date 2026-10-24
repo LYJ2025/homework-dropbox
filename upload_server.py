@@ -1030,6 +1030,7 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 #upPane .tool{padding:18px 20px}
 #upPane .drop{padding:34px 20px}
 #upPane .announce{padding:16px 20px}
+#upPane .drop small:empty{display:none}
 __UP_CSS__
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
