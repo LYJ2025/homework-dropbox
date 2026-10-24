@@ -517,7 +517,7 @@ __ANNOUNCE__
 </div>
 <div class=mask id=dupmask>
  <div class="glass dlg">
-  <h3>⚠️ 检测到重复提交</h3>
+  <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 2.8 20h18.4Z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>检测到重复提交</h3>
   <p class=dtext>文件夹「<b id=dupfolder></b>」里已经有这些同学的文件：</p>
   <div class=duplist id=duplist></div>
   <p class=dtext>是否用新上传的文件<b>替换原文件</b>？<br>如果你传错了文件夹，请点「取消」，检查后再传。</p>
@@ -529,7 +529,7 @@ __ANNOUNCE__
 </div>
 <div class=mask id=smallmask>
  <div class="glass dlg">
-  <h3>⚠️ 文件可能有问题</h3>
+  <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 2.8 20h18.4Z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>文件可能有问题</h3>
   <p class=dtext>以下文件小于 1KB，可能没传对或者打不开：</p>
   <div class=duplist id=smalllist></div>
   <p class=dtext>确定仍要上传吗？</p>
@@ -597,10 +597,10 @@ function mk(file,status,msg2,small){return {id:++seq,file,status:status,msg:msg2
 function stTxt(t){
  if(t.status==='pending')return t.retry?('等待重试 '+t.retry+'/2'):'等待中';
  if(t.status==='uploading')return t.pct+'%';
- if(t.status==='done')return '✅ 已上传';
+ if(t.status==='done')return '已上传';
  if(t.status==='skipped')return '⏭ 已跳过';
  if(t.status==='canceled')return '已取消';
- if(t.status==='error')return '❌ 失败';
+ if(t.status==='error')return '失败';
  return '';}
 function render(){
  flist.style.display=queue.length?'block':'none';
@@ -619,7 +619,7 @@ function render(){
    +'</div>'
    +(t.status==='uploading'?'<div class=fbar><i style="width:'+t.pct+'%"></i></div>':'')
    +(t.msg?'<div class=ferr>'+esc(t.msg)+'</div>':'')
-   +(t.small&&t.status==='pending'?'<div class=ferr style="color:#b8860b">⚠️ 文件小于 1KB，请检查是否传对、能否正常打开</div>':'')
+   +(t.small&&t.status==='pending'?'<div class=ferr style="color:#b8860b">文件小于 1KB，请检查是否传对、能否正常打开</div>':'')
    +'</div>';
  }
  flist.innerHTML=html;
@@ -747,7 +747,7 @@ function finish(){
  const sk=queue.filter(t=>t.status==='skipped').length;
  const bad=queue.filter(t=>t.status==='error').length;
  const cd=queue.filter(t=>t.status==='canceled').length;
- if(bad){msg.textContent='⚠️ 完成：'+ok+' 成功'+(sk?(', '+sk+' 跳过'):'')+'，'+bad+' 失败'+(cd?(', '+cd+' 取消'):'');msg.className='msg err';}
+ if(bad){msg.textContent='完成：'+ok+' 成功'+(sk?(', '+sk+' 跳过'):'')+'，'+bad+' 失败'+(cd?(', '+cd+' 取消'):'');msg.className='msg err';}
  else if(ok||sk){msg.textContent='🎉 全部完成：'+ok+' 成功'+(sk?(', '+sk+' 跳过'):'')+(cd?(', '+cd+' 取消'):'');msg.className='msg';}
  started=false;
 }
@@ -759,11 +759,11 @@ def index_html() -> str:
     # 默认项为不可选中的提示项, 防止绕过界面直接提交到根目录
     opts = '<option value="" selected disabled>请选择文件夹</option>'
     for d in list_folders():
-        opts += f'<option value="{html.escape(d)}">📁 {html.escape(d)}</option>'
+        opts += f'<option value="{html.escape(d)}">{html.escape(d)}</option>'
     ann = load_announcement()
     if ann:
         announce = ('<div class="glass announce">'
-                    '<div class=anrow><span class=anico>📢</span>'
+                    '<div class=anrow><span class=anico><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l5.5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg></span>'
                     '<span class=antext>公告'
                     f'<span class=antime>{html.escape(ann["time"])}</span></span></div>'
                     f'<p>{html.escape(ann["text"])}</p></div>')
@@ -1015,7 +1015,7 @@ __CHECK_ICON__
    <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
    <select id=ffolder name=folder>
     <option value="all"__SEL_ALL__>全部文件夹</option>
-    <option value="__root__"__SEL_ROOT__>📥 未分类</option>
+    <option value="__root__"__SEL_ROOT__>未分类</option>
 __FOLDER_OPTS__
    </select>
   </form>
@@ -1041,7 +1041,7 @@ __FOLDER_OPTS__
   <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
   <select name=folder id=dfolder>
    <option value="all"__SEL_DL_ALL__>全部文件夹</option>
-   <option value="__root__"__SEL_DL_ROOT__>📥 未分类</option>
+   <option value="__root__"__SEL_DL_ROOT__>未分类</option>
 __DL_FOLDER_OPTS__
   </select>
   <button type=submit class=cta id=rbtn>打包下载 ZIP</button>
@@ -1076,7 +1076,7 @@ __ROWS__
    </div>
    <div class=popbtns>
     <button type=submit name=action value=publish class=cta><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l5.5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg>发布 / 更新公告</button>
-    <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
+    <button type=submit name=action value=clear class="btn danger"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V5.2a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7"/><path d="M6.5 7 7.5 20h9L17.5 7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>撤下公告</button>
    </div>
    <p class=note>当前状态：<b>__ANNOUNCE_STATUS__</b></p>
   </form>
@@ -1127,10 +1127,10 @@ __ROWS__
   </form>
  </section>
  <section class="glass panel">
-  <h3>📋 名单与规范设置</h3>
+  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4.5" width="12" height="16" rx="2.2"/><path d="M9.5 3.2h5a1.2 1.2 0 0 1 1.2 1.2V6H8.3V4.4a1.2 1.2 0 0 1 1.2-1.2Z"/><path d="M9 10h6"/><path d="M9 13.5h6"/><path d="M9 17h4"/></svg>名单与规范设置</h3>
   <p class=sub2>应交名单：__ROSTER_STATUS__</p>
   <div class=stackbtn>
-   <a class="btn" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__">📝 编辑名单</a>
+   <a class="btn" href="/admin/roster?token=__TOKEN__&folder=__CURFOLDER__"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg>编辑名单</a>
 __NORM_BTN__
   </div>
   <p class=hintbox-text style="margin-top:14px">名单用于核对谁交了、识别重复提交；「规范文件名」按上面的命名模板批量改名历史文件，识别不出身份的文件不会动。</p>
@@ -1159,16 +1159,18 @@ function renFolder(){const f=ffolder.value;
   +'&name='+encodeURIComponent(f)
   +'&new='+encodeURIComponent(n.trim())
   +'&folder='+encodeURIComponent(f);}
+const TRASH_ICO='<svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V5.2a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7"/><path d="M6.5 7 7.5 20h9L17.5 7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>';
+const WARN_ICO='<svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 2.8 20h18.4Z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>';
 let delArm=false,delT=null;
 function delFolder(){
  const f=ffolder.value;
  if(f==='all'||f==='__root__'){alert('请先在筛选中选择要删除的具体文件夹');return;}
  const b=document.getElementById('delBtn');
  if(!delArm){  // 第一步: 只进入待确认状态, 不删任何东西
-  delArm=true;b.textContent='⚠️ 再点一次确认';b.classList.add('armed');
-  delT=setTimeout(()=>{delArm=false;b.textContent='🗑 删除';b.classList.remove('armed');},3000);
+  delArm=true;b.innerHTML=WARN_ICO+'再点一次确认';b.classList.add('armed');
+  delT=setTimeout(()=>{delArm=false;b.innerHTML=TRASH_ICO+'删除';b.classList.remove('armed');},3000);
   return;}
- clearTimeout(delT);delArm=false;b.textContent='🗑 删除';b.classList.remove('armed');
+ clearTimeout(delT);delArm=false;b.innerHTML=TRASH_ICO+'删除';b.classList.remove('armed');
  // 第二步: 再弹窗确认(显示文件夹名, 防删错)
  if(confirm('删除文件夹「'+f+'」会连同其中所有文件一并删除，确定？'))goBack('delete',f);
 }
@@ -1269,7 +1271,7 @@ textarea:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
-<h1>📝 应交名单</h1>
+<h1>应交名单</h1>
 <p class=sub>当前名单共 <b>__CNT__</b> 人，其中 <b>__IDCNT__</b> 人有学号 · 每行一个同学，格式「姓名 学号」或「学号 姓名」</p>
 <form method=post action=/admin/roster>
  <input type=hidden name=token value="__TOKEN__">
@@ -1406,7 +1408,7 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
-<h1>🔧 规范文件名</h1>
+<h1>规范文件名</h1>
 <p class=sub>__SCOPE____NOTE__</p>
 __WARNBOX__
 <section class="glass panel">
@@ -1417,7 +1419,7 @@ __WARNBOX__
  </div>
 </section>
 <section class="glass panel">
- <h3>✏️ 重命名清单（__NREN__ 个）</h3>
+ <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg>重命名清单（__NREN__ 个）</h3>
  __RENBOX__
 </section>
 __SKIPSEC__
@@ -1432,7 +1434,7 @@ def folder_options(cur: str) -> str:
     rows = ""
     for d in list_folders():
         sel = " selected" if cur == d else ""
-        rows += f'    <option value="{html.escape(d)}"{sel}>📁 {html.escape(d)}</option>\n'
+        rows += f'    <option value="{html.escape(d)}"{sel}>{html.escape(d)}</option>\n'
     return rows.rstrip("\n")
 
 @app.get("/admin")
@@ -1450,25 +1452,25 @@ def admin():
         rel_path = (rel + "/" + fn) if rel else fn
         href_dl = "/admin/download/" + quote(rel_path)
         href_del = "/admin/delete/" + quote(rel_path)
-        tag = (f'<span class=ftag>📁 {html.escape(rel)}</span>' if rel
-               else '<span class=ftag>📥 未分类</span>')
+        tag = (f'<span class=ftag>{html.escape(rel)}</span>' if rel
+               else '<span class=ftag>未分类</span>')
         rows += (f"<div class=row>"
-                 f"<div class=fmeta><div class=fname>📄 {html.escape(fn)}{tag}</div>"
+                 f"<div class=fmeta><div class=fname>{html.escape(fn)}{tag}</div>"
                  f"<div class=fsub>{fmt_sz(sz)} · 上传于 {time.strftime('%Y-%m-%d %H:%M', time.localtime(mt))}</div></div>"
                  f"<div class=facts>"
-                 f"<a class=btn href='{href_dl}?token={ADMIN_TOKEN}'>⬇ 下载</a>"
+                 f"<a class=btn href='{href_dl}?token={ADMIN_TOKEN}'><svg class='svgico' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4.5v11'/><path d='m7.5 10.5 4.5 4.5 4.5-4.5'/><path d='M4.5 16v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3'/></svg>下载</a>"
                  f"<a class=\"btn danger\" href='{href_del}?token={ADMIN_TOKEN}&folder={quote(folder)}' onclick=\"return confirm('确定删除该文件?')\">删除</a>"
                  f"</div></div>")
     if not files:
         if folder != "all":
             fdesc = {"__root__": "未分类"}.get(folder, folder)
-            rows = ('<div class=empty>🔍 当前文件夹下暂无文件<br>'
+            rows = ('<div class=empty>当前文件夹下暂无文件<br>'
                     '<small style="color:#a5b0c2">筛选条件：文件夹 = ' + html.escape(fdesc)
                     + '<br>文件并未丢失，在「文件夹」下拉里选「全部文件夹」即可查看所有文件</small></div>')
         else:
             rows = "<div class=empty>这里空空如也，还没有任何文件</div>"
-    fp = {"all": ("", ""), "__root__": ("📥 未分类", "pill folder")}.get(
-        folder, (f"📁 {folder}", "pill folder"))
+    fp = {"all": ("", ""), "__root__": ("未分类", "pill folder")}.get(
+        folder, (folder, "pill folder"))
     folder_pill = (f'<span class="pill {fp[1]}">{html.escape(fp[0])}</span>'
                    if fp[0] else "")
     sel_all = " selected" if folder == "all" else ""
@@ -1490,7 +1492,7 @@ def admin():
     _rec = _cfg.get("recognize", True)
     _norm = _cfg.get("normalize", True) and _rec
     norm_btn = (f'   <a class="btn" href="/admin/normalize?token={ADMIN_TOKEN}'
-                f'&folder={quote(folder)}">🔧 规范文件名</a>' if _norm else '')
+                f'&folder={quote(folder)}"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a9 9 0 0 1 1.8 4.7A9 9 0 0 1 18.5 10a9 9 0 0 1-4.7 1.8A9 9 0 0 1 12 16.5a9 9 0 0 1-1.8-4.7A9 9 0 0 1 5.5 10a9 9 0 0 1 4.7-1.8A9 9 0 0 1 12 3.5Z"/><path d="M18.5 16.5c.3.9.9 1.5 1.8 1.8-.9.3-1.5.9-1.8 1.8-.3-.9-.9-1.5-1.8-1.8.9-.3 1.5-.9 1.8-1.8Z"/></svg>规范文件名</a>' if _norm else '')
     _chk_svg = ('<svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" '
                 'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
                 '<rect x="6" y="4.5" width="12" height="16" rx="2.2"/>'
@@ -1501,15 +1503,15 @@ def admin():
                   f'&folder={quote(folder)}\'">{_chk_svg}</button>'
                   if _rec else '')
     if not _rec:
-        check_hint = ('名单识别已在「⚙️ 设置」里关闭——开启后右上角出现 🔍 核对入口，'
+        check_hint = ('名单识别已在「设置」里关闭——开启后右上角出现核对入口，'
                       '同学上传时也才有重复提交提示。')
     elif not _norm:
         check_hint = ('按当前筛选的文件夹核对谁没交；自动规范化已关闭（上传的文件保持原名，'
-                      '同名加 (1)），所以在「⚙️ 设置」里开启后才有「规范文件名」批量入口。')
+                      '同名加 (1)），所以在「设置」里开启后才有「规范文件名」批量入口。')
     else:
-        check_hint = ('点右上角 🔍 图标查看当前文件夹的核对报告（谁没交/已交明细）；'
+        check_hint = ('点右上角的核对图标查看当前文件夹的核对报告（谁没交/已交明细）；'
                       '同学上传后若识别出是谁（且名单有其学号），文件会按命名模板自动改名，'
-                      '「🔧 规范文件名」可批量处理历史文件')
+                      '「规范文件名」可批量处理历史文件')
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
             .replace("__ROSTER_STATUS__", roster_status)
@@ -1643,7 +1645,7 @@ def admin_check():
     if not roster:
         return no_store(Response(
             "<!doctype html><meta charset=utf-8><script>alert("
-            + json.dumps("还没有设置应交名单。请先回到管理页点「📝 编辑名单」导入全班姓名。")
+            + json.dumps("还没有设置应交名单。请先回到管理页点「编辑名单」导入全班姓名。")
             + ");location='/admin?token=" + ADMIN_TOKEN + "';</script>",
             mimetype="text/html"))
     files = []
@@ -1660,21 +1662,21 @@ def admin_check():
         missbox = ('<div class=miss>' + "".join(
             f'<span class=mtag>🚫 {html.escape(x)}</span>' for x in missing) + '</div>')
     else:
-        missbox = '<div class="allok g">🎉 全部交齐，无一遗漏！</div>'
+        missbox = '<div class="allok g">全部交齐，无一遗漏！</div>'
     okrows = ""
     for name in roster:
         if name in submitted:
             fl = submitted[name]
             cls = "okrow multi" if len(fl) > 1 else "okrow"
-            fl_html = "<br>".join(f"📄 {html.escape(x)}" for x in fl)
-            okrows += (f'<div class="{cls}"><span class=nm>✅ {html.escape(name)}'
+            fl_html = "<br>".join(f"{html.escape(x)}" for x in fl)
+            okrows += (f'<div class="{cls}"><span class=nm>{html.escape(name)}'
                        f'<span class=cnt>{len(fl)} 个文件</span></span>'
                        f'<span class=fl>{fl_html}</span></div>')
     okbox = okrows or '<div class="allok b">当前范围内还没有任何人交文件</div>'
     if unknown:
         unkbox = "".join(
-            f'<div class=unkrow><span class=fn>📄 {html.escape(fn)}</span>'
-            f'<span class=ftag>{("📁 " + html.escape(rel)) if rel else "📥 未分类"}</span></div>'
+            f'<div class=unkrow><span class=fn>{html.escape(fn)}</span>'
+            f'<span class=ftag>{html.escape(rel) if rel else "未分类"}</span></div>'
             for rel, fn in unknown)
     else:
         unkbox = '<div class="allok g">所有文件都能对应到名单中的同学</div>'
@@ -1764,41 +1766,41 @@ def admin_normalize():
             (ren if new else skip).append((fn, new or REASON_TXT.get(why, why), rel))
     renbox = ""
     for fn, new, rel in ren:
-        tag = f'<span class=ftag>📁 {html.escape(rel)}</span>' if rel else ""
-        renbox += (f'<div class=nrow><span class=old>📄 {html.escape(fn)}</span>'
+        tag = f'<span class=ftag>{html.escape(rel)}</span>' if rel else ""
+        renbox += (f'<div class=nrow><span class=old>{html.escape(fn)}</span>'
                    f'<span class=arrow>➜</span>'
                    f'<span class=new>{html.escape(new)}</span>{tag}</div>')
     if not renbox:
         renbox = '<div class=allok>没有需要重命名的文件</div>'
     if skip:
-        skipsec = ('<section class="glass panel"><h3>⏸ 保持不变（'
+        skipsec = ('<section class="glass panel"><h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/></svg>保持不变（'
                    + str(len(skip)) + ' 个）</h3>'
-                   + "".join(f'<div class=srow>📄 {html.escape(fn)}'
+                   + "".join(f'<div class=srow>{html.escape(fn)}'
                              f'<span class=rsn>{html.escape(why)}</span></div>'
                              for fn, why, rel in skip) + '</section>')
     else:
         skipsec = ""
     if not enabled:
-        note = ('<br><span style="color:#b8860b">⚠️ 自动规范化已在管理页关闭</span>')
-        warnbox = ('<div class=warnbox>⚠️ <b>「名单识别与自动规范化」当前是关闭状态。</b>'
-                   '点管理页右上角的 ⚙️ 按钮打开开关即可——打开后上传的文件会按命名模板'
+        note = ('<br><span style="color:#b8860b">自动规范化已在管理页关闭</span>')
+        warnbox = ('<div class=warnbox><b>「名单识别与自动规范化」当前是关闭状态。</b>'
+                   '点管理页右上角的设置按钮打开开关即可——打开后上传的文件会按命名模板'
                    '自动改名，这里也能批量处理历史文件。'
                    '（关闭不影响「作业核对」功能。）</div>')
         gobtn = ""
     elif not has_ids:
-        note = ('<br><span style="color:#b8860b">⚠️ 名单里还没有学号，自动重命名未启用</span>')
-        warnbox = ('<div class=warnbox>⚠️ <b>名单里还没有学号。</b>自动重命名需要「姓名 + 学号」配对——'
-                   '请先回管理页点「📝 编辑名单」，把带学号的全员名单重新粘贴保存一次。'
+        note = ('<br><span style="color:#b8860b">名单里还没有学号，自动重命名未启用</span>')
+        warnbox = ('<div class=warnbox><b>名单里还没有学号。</b>自动重命名需要「姓名 + 学号」配对——'
+                   '请先回管理页点「编辑名单」，把带学号的全员名单重新粘贴保存一次。'
                    '（只用姓名不带学号，核对功能不受影响，但文件不会自动改名。）</div>')
         gobtn = ""
     else:
         note = ""
-        warnbox = ('<div class=warnbox>⚠️ <b>此操作会真正重命名文件，不可撤销。</b>'
-                   '请核对上面的清单——按管理页右上角 ⚙️ 里的命名模板生成；'
+        warnbox = ('<div class=warnbox><b>此操作会真正重命名文件，不可撤销。</b>'
+                   '请核对上面的清单——按管理页右上角「设置」里的命名模板生成；'
                    '认不出是谁的、命中多个姓名的（如小组作业）会保持原样，列在下方「保持不变」里。</div>')
         gobtn = (f'<a class=cta href="/admin/normalize/run?token={ADMIN_TOKEN}'
                  f'&folder={quote(folder)}" onclick="return confirm(\'确认执行这 '
-                 f'{len(ren)} 个重命名？\')">✅ 确认执行重命名</a>' if ren else "")
+                 f'{len(ren)} 个重命名？\')">确认执行重命名</a>' if ren else "")
     page = (NORMALIZE_TPL
             .replace("__SCOPE__", scope)
             .replace("__NOTE__", note)
