@@ -355,6 +355,7 @@ input[type=date],select{font-family:inherit;font-size:15px;padding:10px 12px;bor
  border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.6);color:#243049;outline:none;
  box-shadow:inset 0 2px 6px rgba(31,45,80,.06);transition:.2s}
 input[type=date]:focus,select:focus{border-color:rgba(90,124,255,.8);box-shadow:0 0 0 3px rgba(90,124,255,.15)}
+.svgico{width:1em;height:1em;display:inline-block;vertical-align:-.16em;flex-shrink:0}
 .btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;padding:9px 16px;
  border-radius:12px;cursor:pointer;text-decoration:none;color:#3a5bcc;font-family:inherit;border:1px solid rgba(255,255,255,.85);
  background:rgba(255,255,255,.55);
@@ -492,10 +493,10 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 <p class=sub>支持一次选择多个文件 · 文档 / 表格 / 压缩包 / 图片</p>
 __ANNOUNCE__
 <div class="glass tool">
- <span><label>📁 文件夹</label><select id=folder>__FOLDERS__</select></span>
+ <span><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</label><select id=folder>__FOLDERS__</select></span>
 </div>
 <div class="glass drop" id=drop>
- <div class=ico>📂</div>
+ <div class=ico><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="url(#ig)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="ig" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f7cff"/><stop offset="1" stop-color="#8a5cff"/></linearGradient></defs><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg></div>
  <b>点击选择文件（可多选）</b>
  <small>__LIMIT_HINT__</small>
 </div>
@@ -610,7 +611,7 @@ function render(){
  let html='';
  for(const t of queue){
   html+='<div class="fitem '+t.status+'"><div class=frow>'
-   +'<span class=fnm2 title="'+esc(t.file.name)+'">📄 '+esc(t.file.name)+'</span>'
+   +'<span class=fnm2 title="'+esc(t.file.name)+'"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z"/><path d="M14 3.5V8h4.5"/></svg> '+esc(t.file.name)+'</span>'
    +'<span class=fsz2>'+fmt(t.file.size)+'</span>'
    +'<span class="fst '+t.status+'">'+stTxt(t)+'</span>'
    +((t.status==='pending'&&!started)||(t.status==='uploading')
@@ -654,7 +655,7 @@ function precheck(){
   duplist.innerHTML=dups.map((t,i)=>{
    const r=rs[pend.indexOf(t)];
    const ex=(r.existing||[]).map(x=>'<small>已存在：'+esc(x)+'</small>').join('');
-   return '<div class=dupitem>📄 '+esc(t.file.name)+'<br>'+ex+'</div>';
+   return '<div class=dupitem><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z"/><path d="M14 3.5V8h4.5"/></svg> '+esc(t.file.name)+'<br>'+ex+'</div>';
   }).join('');
   dupmask.classList.add('on');
   return new Promise(res=>{
@@ -668,7 +669,7 @@ function precheck(){
 function askSmall(){
  const smalls=queue.filter(t=>t.status==='pending'&&t.small);
  if(!smalls.length)return Promise.resolve(true);
- smalllist.innerHTML=smalls.map(t=>'<div class=dupitem>📄 '+esc(t.file.name)+'（'+fmt(t.file.size)+'）</div>').join('');
+ smalllist.innerHTML=smalls.map(t=>'<div class=dupitem><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z"/><path d="M14 3.5V8h4.5"/></svg> '+esc(t.file.name)+'（'+fmt(t.file.size)+'）</div>').join('');
  smallmask.classList.add('on');
  return new Promise(res=>{
   smallOk.onclick=()=>{smallmask.classList.remove('on');res(true);};
@@ -894,6 +895,11 @@ h1{font-size:30px;font-weight:800;margin-bottom:18px;
 .ticbtn:active{transform:translateY(0)}
 .ticbtn.on{color:#fff;background:linear-gradient(135deg,#4f7cff,#7a5cff);border-color:transparent;
  box-shadow:0 6px 16px rgba(79,104,255,.35), inset 0 1px 0 rgba(255,255,255,.4)}
+.ticbtn .svgico{width:22px;height:22px;vertical-align:0}
+.tab .svgico{width:18px;height:18px;vertical-align:-.2em;margin-right:5px}
+h3 .svgico{width:19px;height:19px;vertical-align:-.2em;color:#4f6cff;margin-right:6px}
+.btn .svgico,.cta .svgico{width:17px;height:17px;vertical-align:-.2em}
+.lbl .svgico,.ltitle .svgico{width:16px;height:16px;vertical-align:-.2em;margin-right:5px;color:#4f6cff}
 .sub2{font-size:13px;color:#8a97ab;line-height:1.8;margin-bottom:14px}
 .panel .sw{margin:10px 0}
 .panel .sw label{display:flex;align-items:center;gap:9px;cursor:pointer;
@@ -992,13 +998,13 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
  <h1>作业管理</h1>
  <div class=ticbtns>
 __CHECK_ICON__
-  <button type=button class=ticbtn id=btnAnn title="公告栏">📢</button>
-  <button type=button class=ticbtn id=btnCfg title="设置">⚙️</button>
+  <button type=button class=ticbtn id=btnAnn title="公告栏"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l5.5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg></button>
+  <button type=button class=ticbtn id=btnCfg title="设置"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></button>
  </div>
 </div>
 <div class=tabs>
- <button type=button class="tab on" id=tabBtnManage>📋 文件管理</button>
- <button type=button class=tab id=tabBtnUpload>⬆️ 上传文件</button>
+ <button type=button class="tab on" id=tabBtnManage><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件管理</button>
+ <button type=button class=tab id=tabBtnUpload><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5V4.5"/><path d="m7.5 9 4.5-4.5L16.5 9"/><path d="M4.5 16v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg>上传文件</button>
 </div>
 
 <div id=tabManage>
@@ -1006,7 +1012,7 @@ __CHECK_ICON__
  <div class=bar>
   <form id=ffilter method=get style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
    <input type=hidden name=token value="__TOKEN__">
-   <span class=lbl>📁 文件夹</span>
+   <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
    <select id=ffolder name=folder>
     <option value="all"__SEL_ALL__>全部文件夹</option>
     <option value="__root__"__SEL_ROOT__>📥 未分类</option>
@@ -1015,11 +1021,11 @@ __FOLDER_OPTS__
   </form>
  </div>
  <div class=fmgr>
-  <span class=lbl>🗂 文件夹管理（对当前筛选的文件夹生效）</span>
+  <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹管理（对当前筛选的文件夹生效）</span>
   <div class=fmgr-btns>
-   <button type=button class="btn mini" onclick="addFolder()">＋ 新建文件夹</button>
-   <button type=button class="btn mini" onclick="renFolder()">✏️ 重命名</button>
-   <button type=button class="btn mini danger" id=delBtn onclick="delFolder()">🗑 删除</button>
+   <button type=button class="btn mini" onclick="addFolder()"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>新建文件夹</button>
+   <button type=button class="btn mini" onclick="renFolder()"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4Z"/></svg>重命名</button>
+   <button type=button class="btn mini danger" id=delBtn onclick="delFolder()"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V5.2a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7"/><path d="M6.5 7 7.5 20h9L17.5 7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>删除</button>
   </div>
   <div class=hintbox>
    <p class=hintbox-text id=hbFmgr style="display:none">重命名不影响文件夹内的文件；删除会连同其中所有文件一并删除</p>
@@ -1029,10 +1035,10 @@ __FOLDER_OPTS__
 </section>
 
 <section class="glass panel">
- <h3>🗜️ 批量下载（按文件夹打包 ZIP）</h3>
+ <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 16v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg>批量下载（按文件夹打包 ZIP）</h3>
  <form method=get action=/admin/range class=range id=rform>
   <input type=hidden name=token value="__TOKEN__">
-  <span class=lbl>📁 文件夹</span>
+  <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
   <select name=folder id=dfolder>
    <option value="all"__SEL_DL_ALL__>全部文件夹</option>
    <option value="__root__"__SEL_DL_ROOT__>📥 未分类</option>
@@ -1042,18 +1048,9 @@ __DL_FOLDER_OPTS__
  </form>
 </section>
 
-<section class="glass panel">
- <h3>✅ 作业核对</h3>
- <p style="font-size:14px;color:#5a6a81;font-weight:600;margin-bottom:4px">应交名单：__ROSTER_STATUS__</p>
- <div class=hintbox>
-  <p class=hintbox-text id=hbCheck style="display:none">__CHECK_HINT__</p>
-  <button type=button class="btn mini" onclick="toggleHb('hbCheck',this)">展开说明 ▾</button>
- </div>
-</section>
-
 <section class="glass list">
  <div class=lhead>
-  <span class=ltitle>📄 文件列表</span>
+  <span class=ltitle><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z"/><path d="M14 3.5V8h4.5"/></svg>文件列表</span>
   <span class=pill>共 __N__ 份</span>
   __FOLDER_PILL__
  </div>
@@ -1065,13 +1062,10 @@ __ROWS__
 <div id=tabUpload style="display:none">
  <iframe src="/" class=upframe title="上传文件"></iframe>
 </div>
-<div id=tabUpload style="display:none">
- <iframe src="/" class=upframe title="上传文件"></iframe>
-</div>
 
 <div id=tabAnn style="display:none">
  <section class="glass panel">
-  <h3>📢 公告栏</h3>
+  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l5.5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg>公告栏</h3>
   <p class=sub2>发布后立即显示在同学上传页顶部，支持多行；清空内容再发布 ＝ 撤下公告。</p>
   <form method=post action=/admin/announcement>
    <input type=hidden name=token value="__TOKEN__">
@@ -1081,7 +1075,7 @@ __ROWS__
     <textarea name=text rows=6 maxlength=2000 placeholder="例如：&#10;请于本周五前上传作业，命名格式：学号+姓名&#10;有特殊情况请直接联系学习委员">__ANNOUNCE_TEXT__</textarea>
    </div>
    <div class=popbtns>
-    <button type=submit name=action value=publish class=cta>📢 发布 / 更新公告</button>
+    <button type=submit name=action value=publish class=cta><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h2l5.5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a9 9 0 0 1 0 12"/></svg>发布 / 更新公告</button>
     <button type=submit name=action value=clear class="btn danger">🗑 撤下公告</button>
    </div>
    <p class=note>当前状态：<b>__ANNOUNCE_STATUS__</b></p>
@@ -1091,7 +1085,7 @@ __ROWS__
 
 <div id=tabCfg style="display:none">
  <section class="glass panel">
-  <h3>⚙️ 上传设置</h3>
+  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>上传设置</h3>
   <p class=sub2>名单识别用于作业核对与重复提交提示；自动规范化用于上传后按模板改名。关掉开关，管理页对应功能入口随之隐藏。</p>
   <form method=post action=/admin/settings id=cfgform>
    <input type=hidden name=token value="__TOKEN__">
@@ -1339,11 +1333,11 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
 <div class=wrap>
-<h1>✅ 作业核对报告</h1>
+<h1>作业核对报告</h1>
 <p class=sub>核对范围：__SCOPE____NOTE__</p>
 
 <section class="glass panel">
- <h3>📊 总览</h3>
+ <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/></svg>总览</h3>
  <div class=stat>
   <div><div class=num>__N__</div><div class=cap>应交人数</div></div>
   <div><div class=num style="color:#2e7d5b">__OK__</div><div class=cap>已交</div></div>
@@ -1353,17 +1347,17 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 </section>
 
 <section class="glass panel">
- <h3>❌ 未交名单（__MISS__ 人）</h3>
+ <h3><svg class=svgico style="color:#c0392b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg>未交名单（__MISS__ 人）</h3>
  __MISSBOX__
 </section>
 
 <section class="glass panel">
- <h3>✅ 已交明细（__OK__ 人）</h3>
+ <h3><svg class=svgico style="color:#2e7d5b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.4 2.4 4.6-5"/></svg>已交明细（__OK__ 人）</h3>
  __OKBOX__
 </section>
 
 <section class="glass panel">
- <h3>⚠️ 无法识别的文件（__UNK__ 个）</h3>
+ <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 2.8 20h18.4Z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></svg>无法识别的文件（__UNK__ 个）</h3>
  __UNKBOX__
  <p class=foot>无法识别 = 文件名里匹配不到任何名单姓名，可能是文件名漏写名字、写错名字，或名单外的人传的——需要你人工确认。</p>
 </section>
@@ -1416,7 +1410,7 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <p class=sub>__SCOPE____NOTE__</p>
 __WARNBOX__
 <section class="glass panel">
- <h3>📊 总览</h3>
+ <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/></svg>总览</h3>
  <div class=stat>
   <div><div class=num>__NREN__</div><div class=cap>将重命名</div></div>
   <div><div class=num style="color:#8a97ab">__NSKIP__</div><div class=cap>保持不变</div></div>
@@ -1497,9 +1491,14 @@ def admin():
     _norm = _cfg.get("normalize", True) and _rec
     norm_btn = (f'   <a class="btn" href="/admin/normalize?token={ADMIN_TOKEN}'
                 f'&folder={quote(folder)}">🔧 规范文件名</a>' if _norm else '')
+    _chk_svg = ('<svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                '<rect x="6" y="4.5" width="12" height="16" rx="2.2"/>'
+                '<path d="M9.5 3.2h5a1.2 1.2 0 0 1 1.2 1.2V6H8.3V4.4a1.2 1.2 0 0 1 1.2-1.2Z"/>'
+                '<path d="m9 13 2 2 4-4.5"/></svg>')
     check_icon = (f'<button type=button class=ticbtn id=btnCheck title="作业核对" '
                   f'onclick="location=\'/admin/check?token={ADMIN_TOKEN}'
-                  f'&folder={quote(folder)}\'">🔍</button>'
+                  f'&folder={quote(folder)}\'">{_chk_svg}</button>'
                   if _rec else '')
     if not _rec:
         check_hint = ('名单识别已在「⚙️ 设置」里关闭——开启后右上角出现 🔍 核对入口，'
