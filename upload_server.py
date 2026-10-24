@@ -556,6 +556,7 @@ let queue=[],seq=0,running=0,canceled=false,started=false;
 function fmt(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' KB'}
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function extOf(n){const i=n.lastIndexOf('.');return i<0?'':n.slice(i+1).toLowerCase()}
+function stemOf(n){const i=n.lastIndexOf('.');return (i<0?n:n.slice(0,i)).trim().toLowerCase()}
 function totalBytes(){return queue.reduce((s,t)=>s+t.file.size,0)}
 function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error'?t.file.size:(t.status==='uploading'?t.file.size*t.pct/100:0)),0)}
 drop.onclick=()=>pick.click();
@@ -579,8 +580,8 @@ function addFiles(list){
   const e=extOf(f.name);
   if(!ADMIN_MODE&&BLOCKED.includes(e)){queue.push(mk(f,'error','不支持的文件类型：.'+e));reject++;continue;}
   if(!ADMIN_MODE&&f.size>MAX_SIZE){queue.push(mk(f,'error','单个文件超过 '+MAX_MB+'MB 限制'));reject++;continue;}
-  if(queue.some(t=>t.file.name===f.name&&t.file.size===f.size&&t.status!=='error')){
-   queue.push(mk(f,'error','与列表中已有文件重复'));continue;}
+  if(queue.some(t=>t.status!=='error'&&stemOf(t.file.name)===stemOf(f.name))){
+   queue.push(mk(f,'error','与列表中已有文件同名（后缀不同也算，只能保留一个）'));continue;}
   queue.push(mk(f,'pending','',!ADMIN_MODE&&f.size<=1024));
  }
  msg.textContent='';msg.className='msg';
