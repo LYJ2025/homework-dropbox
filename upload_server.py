@@ -8,11 +8,14 @@ from urllib.parse import quote
 from flask import Flask, request, send_file, abort, Response, redirect
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE, "uploads")
-TOKEN_FILE = os.path.join(BASE, ".admin_token")
-ROSTER_FILE = os.path.join(BASE, ".roster")
-ANNOUNCE_FILE = os.path.join(BASE, ".announcement")
-CONFIG_FILE = os.path.join(BASE, ".upload_config")
+# 数据目录：默认与代码同目录；可用环境变量 DATA_DIR 指向任意可写目录
+# （Docker 挂卷、代码目录只读、把数据放独立磁盘等场景都靠它）
+DATA_DIR = os.environ.get("DATA_DIR") or BASE
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+TOKEN_FILE = os.path.join(DATA_DIR, ".admin_token")
+ROSTER_FILE = os.path.join(DATA_DIR, ".roster")
+ANNOUNCE_FILE = os.path.join(DATA_DIR, ".announcement")
+CONFIG_FILE = os.path.join(DATA_DIR, ".upload_config")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -1951,22 +1954,85 @@ def admin_delete(rel):
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
 def _hold_awake():
-    """服务运行时顺手持有「禁止空闲睡眠」断言(caffeinate -i -s -w 本进程 PID):
+    """(仅 macOS) 服务运行时顺手持有「禁止空闲睡眠」断言(caffeinate -i -s -w 本进程 PID):
     只要本服务活着, Mac 就不会因为空闲而睡眠; 服务一停, caffeinate 随之退出,
     断言自动释放, 系统恢复默认睡眠策略。不依赖 sudo、不改系统电源设置。
-    注意: 断言拦不住「合盖睡眠」——夜里盖盖子仍会睡(那需要 pmset disablesleep)。"""
+    注意: 断言拦不住「合盖睡眠」——夜里盖盖子仍会睡(那需要 pmset disablesleep)。
+    其它系统(Windows/Linux)没有 caffeinate, 直接跳过, 不影响启动。"""
+    import sys
+    if sys.platform != "darwin":
+        return
+    exe = "/usr/bin/caffeinate"
+    if not os.path.exists(exe):
+        return
     try:
         import subprocess
         subprocess.Popen(
-            ["/usr/bin/caffeinate", "-i", "-s", "-w", str(os.getpid())],
+            [exe, "-i", "-s", "-w", str(os.getpid())],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
         pass
 
+
+def _ensure_cert(cert: str, key: str) -> bool:
+    """确保自签名证书存在：没有就尝试用系统 openssl 生成。
+    生成失败（未装 openssl / 无权限）返回 False，由调用方决定是否退回 HTTP。"""
+    if os.path.exists(cert) and os.path.exists(key):
+        return True
+    if not shutil.which("openssl"):
+        return False
+    import subprocess
+    os.makedirs(os.path.dirname(os.path.abspath(cert)) or ".", exist_ok=True)
+    try:
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+             "-keyout", key, "-out", cert, "-days", "3650",
+             "-subj", "/CN=localhost"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        return False
+    return os.path.exists(cert) and os.path.exists(key)
+
+
 if __name__ == "__main__":
+    import argparse
     import ssl
+
+    ap = argparse.ArgumentParser(
+        description="作业收集箱 · Homework Dropbox（免账号、盲传式作业收集）")
+    ap.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"),
+                    help="监听地址，默认 0.0.0.0（局域网可访问）；只给本机用可设 127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")),
+                    help="监听端口，默认 8080（也可用环境变量 PORT）")
+    ap.add_argument("--cert", default=os.environ.get("CERT_FILE",
+                                                    os.path.join(DATA_DIR, "cert.pem")),
+                    help="证书路径（PEM），默认 <数据目录>/cert.pem")
+    ap.add_argument("--key", default=os.environ.get("KEY_FILE",
+                                                   os.path.join(DATA_DIR, "key.pem")),
+                    help="私钥路径（PEM），默认 <数据目录>/key.pem")
+    ap.add_argument("--http", action="store_true",
+                    default=os.environ.get("HTTPS", "1").strip() in ("0", "false", "no", "off"),
+                    help="以 HTTP 启动（默认 HTTPS；没有证书又装不了 openssl 时会自动退回 HTTP）")
+    args = ap.parse_args()
+
     _hold_awake()
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain("/Users/zjk/nextcloud-drop/cert.pem",
-                        "/Users/zjk/nextcloud-drop/key.pem")
-    app.run(host="0.0.0.0", port=8080, debug=False, ssl_context=ctx)
+
+    ctx = None
+    if not args.http:
+        if _ensure_cert(args.cert, args.key):
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(args.cert, args.key)
+        else:
+            print("[提示] 没有证书，且未找到 openssl 无法自动生成，已退回 HTTP 模式。",
+                  "生产环境建议用反向代理（Nginx/Caddy）配正式证书。")
+
+    scheme = "https" if ctx else "http"
+    show_host = "localhost" if args.host in ("0.0.0.0", "::") else args.host
+    print("\n" + "=" * 58)
+    print(f"  作业收集箱已启动：{scheme}://{show_host}:{args.port}/")
+    print(f"  管理页：{scheme}://{show_host}:{args.port}/admin?token={ADMIN_TOKEN}")
+    print(f"  数据目录：{DATA_DIR}")
+    print(f"  管理令牌：{TOKEN_FILE}")
+    print("=" * 58 + "\n")
+    app.run(host=args.host, port=args.port, debug=False,
+            ssl_context=ctx, threaded=True)
