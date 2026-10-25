@@ -1,0 +1,15 @@
+# 本地运行产生的数据/状态（含隐私，禁止提交）
+uploads/
+.admin_token
+.roster
+.upload_config
+.announcement
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+
+# 日志与系统文件
+*.log
+.DS_Store
