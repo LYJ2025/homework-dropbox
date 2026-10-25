@@ -700,15 +700,30 @@ function tick(){
  render();
 }
 function send(t){
- t.status='uploading';t.pct=0;t.msg='';running++;
+ // 关键: 重试/重发时必须复位 finished 与进度, 否则上一次失败留下的 finished=true
+ // 会让这次请求的 onload 直接 return, 结果被丢弃, 界面永远停在"上传中/0%"
+ t.finished=false;t.pct=0;
+ t.status='uploading';t.msg='';running++;
  const fd=new FormData();
  fd.append('file',t.file);
  fd.append('folder',uploadFolder);
  if(replaceSet.has(t.id))fd.append('replace','1');
  const xhr=new XMLHttpRequest();t.xhr=xhr;
+ // 看门狗: 30 秒没有任何字节进展 → 判定连接已"黑洞"(换网/休眠/隧道重连),
+ // 主动 abort 交给 onabort 走自动重试, 避免永久卡在 0% 没有任何提示
+ let lastOk=Date.now(),seen=-1;
+ const wd=setInterval(()=>{
+  if(t.finished){clearInterval(wd);return;}
+  if(t.pct!==seen){seen=t.pct;lastOk=Date.now();return;}
+  if(Date.now()-lastOk>=30000){
+   clearInterval(wd);t.stalled=true;
+   t.msg='连接无响应 '+(t.pct||0)+'%（网络切换或服务重启），正在重试…';render();
+   try{xhr.abort();}catch(e){}
+  }
+ },2000);
  xhr.open('POST','/upload');
  xhr.upload.onprogress=e=>{if(e.lengthComputable){t.pct=Math.round(e.loaded/e.total*100);render();}};
- xhr.onload=()=>{ if(t.finished)return; t.finished=true; running--;
+ xhr.onload=()=>{ if(t.finished)return; clearInterval(wd);t.finished=true; running--;
   if(xhr.status===200){
    try{const r=JSON.parse(xhr.responseText);
     t.status=(r.status==='skipped')?'skipped':'done';t.msg='';
@@ -717,11 +732,15 @@ function send(t){
   else if(xhr.status===400){t.status='error';t.msg='服务器拒绝该文件（如文件夹不存在）';}
   else{t.status='error';t.msg='服务器错误 ('+xhr.status+')';}
   render();tick();};
- xhr.onerror=xhr.onabort=()=>{ if(t.finished)return; t.finished=true; running--;
+ xhr.onerror=xhr.onabort=()=>{ if(t.finished)return; clearInterval(wd);t.finished=true; running--;
   if(t.canceledByUser){t.status='canceled';t.msg='已取消';}
-  else if(t.retry<2){t.retry++;t.msg='网络中断，自动重试 '+t.retry+'/2';t.status='pending';
-   setTimeout(()=>{if(!canceled)send(t);},t.retry*900);}
-  else{t.status='error';t.msg='网络错误，已自动重试 2 次仍失败';}
+  else if(t.retry<2){t.retry++;
+   t.msg=(t.stalled?'连接无响应，':'网络中断，')+'自动重试 '+t.retry+'/2';
+   t.status='pending';t.pct=0;
+   setTimeout(()=>{if(!canceled){t.finished=false;send(t);}},t.retry*900);}
+  else{t.status='error';
+   t.msg=t.stalled?'连接无响应，已重试 2 次仍失败（请刷新页面后重传）'
+                  :'网络错误，已自动重试 2 次仍失败';}
   render();tick();};
  xhr.send(fd);
 }
@@ -824,6 +843,7 @@ def index():
 
 @app.post("/upload")
 def upload():
+    _t0 = time.time()
     f = request.files.get("file")
     if not f or not f.filename:
         abort(400, "没有文件")
@@ -841,6 +861,10 @@ def upload():
     # replace=1: 上传前弹窗确认过「替换原文件」——删掉该文件夹内属于同一同学的
     # 所有文件(识别优先, 认不出按精确同名), 让新文件顶替, 不再走 (n) 改名
     replace_mode = (request.form.get("replace") or "") == "1"
+    # 诊断用: 请求真正到达服务端就打一行; 若日志里只有"开始"没有"完成",
+    # 说明是传输中途断了(网络/休眠/隧道), 而不是服务端处理卡住
+    print(f"[upload] 开始 {name} · {request.content_length or '?'} 字节 · "
+          f"来自 {request.remote_addr} · replace={int(replace_mode)}", flush=True)
     if replace_mode:
         for pf in student_files_in(target, name, load_roster_pairs()):
             try:
@@ -859,6 +883,7 @@ def upload():
     # 自动规范化: 识别出是名单里的谁, 就改成「学号 姓名」标准格式
     # (学号取名单里的, 不信文件名; 认不出/多人混淆/名单无学号时保持原样)
     name = auto_normalize(target, name)
+    print(f"[upload] 完成 {name} · 用时 {time.time() - _t0:.1f}s", flush=True)
     return Response(json.dumps({"status": "uploaded", "name": name,
                                 "folder": folder}),
                     mimetype="application/json")
