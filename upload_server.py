@@ -306,18 +306,19 @@ def list_folders():
                   and not d.startswith("."))
 
 def iter_all_files():
-    """扫描全部文件 [(rel, fn, path, mtime, size)]; rel='' 表示未分类(根目录)"""
+    """扫描全部文件 [(rel, fn, path, mtime, size)]; rel='' 表示未分类(根目录)。
+    跳过以 . 开头的隐藏文件(.DS_Store / Thumbs.db 之类系统垃圾), 免得混进列表和核对。"""
     out = []
     for fn in sorted(os.listdir(UPLOAD_DIR)):
         p = os.path.join(UPLOAD_DIR, fn)
-        if os.path.isfile(p):
+        if os.path.isfile(p) and not fn.startswith("."):
             mt = os.path.getmtime(p)
             out.append(("", fn, p, mt, os.path.getsize(p)))
     for d in list_folders():
         dd = os.path.join(UPLOAD_DIR, d)
         for fn in sorted(os.listdir(dd)):
             p = os.path.join(dd, fn)
-            if os.path.isfile(p):
+            if os.path.isfile(p) and not fn.startswith("."):
                 mt = os.path.getmtime(p)
                 out.append((d, fn, p, mt, os.path.getsize(p)))
     return out
@@ -995,6 +996,25 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .lhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
  padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.6)}
 .ltitle{font-size:15px;font-weight:700;color:#31405e;margin-right:auto}
+/* 文件列表：按文件名搜索 */
+.lsearch{position:relative;padding:12px 18px 2px}
+.lsearch .si{position:absolute;left:30px;top:calc(50% + 5px);transform:translateY(-50%);
+ width:16px;height:16px;color:#93a0b5;pointer-events:none}
+.lsearch input{width:100%;box-sizing:border-box;font:inherit;font-size:14px;
+ padding:10px 38px 10px 36px;border-radius:12px;color:#2b3550;outline:none;
+ border:1px solid rgba(120,140,180,.30);background:rgba(255,255,255,.72);
+ transition:border-color .16s,box-shadow .16s,background .16s}
+.lsearch input::placeholder{color:#9aa6ba}
+.lsearch input:focus{border-color:#7d93ff;background:#fff;
+ box-shadow:0 0 0 3px rgba(90,124,255,.14)}
+.lsearch .fclr{position:absolute;right:26px;top:calc(50% + 5px);transform:translateY(-50%);
+ width:22px;height:22px;display:none;align-items:center;justify-content:center;
+ padding:0;border:none;border-radius:7px;cursor:pointer;color:#63748e;
+ background:rgba(120,140,180,.16)}
+.lsearch .fclr:hover{background:rgba(120,140,180,.30);color:#31405e}
+.lsearch .fclr .svgico{width:13px;height:13px}
+.pill.find{background:rgba(90,124,255,.14);border-color:rgba(90,124,255,.38);color:#3a56b8;
+ display:none}
 .lbody{max-height:420px;overflow-y:auto;padding:8px}
 .lbody::-webkit-scrollbar{width:8px}
 .lbody::-webkit-scrollbar-thumb{background:rgba(120,140,180,.35);border-radius:99px}
@@ -1101,11 +1121,19 @@ __DL_FOLDER_OPTS__
  <div class=lhead>
   <span class=ltitle><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z"/><path d="M14 3.5V8h4.5"/></svg>文件列表</span>
   <span class=pill>共 __N__ 份</span>
+  <span class="pill find" id=fcount></span>
   __FOLDER_PILL__
+ </div>
+ <div class=lsearch>
+  <svg class="svgico si" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.6-3.6"/></svg>
+  <input id=fsrch type=text autocomplete=off spellcheck=false
+   placeholder="搜索文件名（不区分大小写，空格分隔多个关键词）">
+  <button type=button class=fclr id=fclr title="清空搜索" aria-label="清空搜索"><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg></button>
  </div>
  <div class=lbody>
 __ROWS__
  </div>
+ <div class=empty id=fempty style="display:none"></div>
 </section>
 </div>
 <div id=tabUpload style="display:none">
@@ -1289,6 +1317,45 @@ function updTpl(){
  tplPrev.textContent=s||'(模板为空)';
 }
 if(tplIn){tplIn.oninput=updTpl;updTpl();}
+
+// 文件列表：按文件名即时筛选（纯前端，不请求服务器）
+// 规则：不区分大小写；空格分隔多个关键词时需全部命中（AND）；Esc 或 × 清空
+(function(){
+ const inp=document.getElementById('fsrch'),clr=document.getElementById('fclr'),
+  body=document.querySelector('.lbody'),cnt=document.getElementById('fcount'),
+  emp=document.getElementById('fempty');
+ if(!inp||!body)return;
+ const rows=[].slice.call(body.querySelectorAll('.row'));
+ rows.forEach(r=>{r.dataset.q=(r.getAttribute('data-fn')||'').toLowerCase();});
+ if(!rows.length){const box=inp.closest('.lsearch');if(box)box.style.display='none';return;}
+ function apply(){
+  const raw=inp.value.trim(),q=raw.toLowerCase();
+  clr.style.display=q?'flex':'none';
+  if(!q){
+   rows.forEach(r=>r.style.display='');
+   cnt.style.display='none';emp.style.display='none';
+   body.style.display='';
+   return;
+  }
+  const toks=q.split(/\\s+/).filter(Boolean);
+  let n=0;
+  rows.forEach(r=>{
+   const hit=toks.every(t=>r.dataset.q.indexOf(t)>=0);
+   r.style.display=hit?'':'none';
+   if(hit)n++;
+  });
+  cnt.textContent='匹配 '+n+' 份';
+  cnt.style.display='inline-block';
+  body.style.display=n?'':'none';
+  emp.style.display=n?'none':'block';
+  if(!n){emp.textContent='没有文件名包含「'+raw+'」的文件';}
+ }
+ inp.addEventListener('input',apply);
+ inp.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){inp.value='';apply();inp.blur();}
+ });
+ clr.addEventListener('click',()=>{inp.value='';apply();inp.focus();});
+})();
 </script>
 </body></html>""")
 
@@ -1511,7 +1578,7 @@ def admin():
         href_del = "/admin/delete/" + quote(rel_path)
         tag = (f'<span class=ftag>{html.escape(rel)}</span>' if rel
                else '<span class=ftag>未分类</span>')
-        rows += (f"<div class=row>"
+        rows += (f"<div class=row data-fn=\"{html.escape(fn.lower())}\">"
                  f"<div class=fmeta><div class=fname>{html.escape(fn)}{tag}</div>"
                  f"<div class=fsub>{fmt_sz(sz)} · 上传于 {time.strftime('%Y-%m-%d %H:%M', time.localtime(mt))}</div></div>"
                  f"<div class=facts>"
