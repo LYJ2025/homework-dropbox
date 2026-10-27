@@ -16,6 +16,8 @@ TOKEN_FILE = os.path.join(DATA_DIR, ".admin_token")
 ROSTER_FILE = os.path.join(DATA_DIR, ".roster")
 ANNOUNCE_FILE = os.path.join(DATA_DIR, ".announcement")
 CONFIG_FILE = os.path.join(DATA_DIR, ".upload_config")
+# 免交名单: {文件夹名: [姓名...]} —— 按文件夹独立, 长期持久化(不随重启丢失)
+EXEMPT_FILE = os.path.join(DATA_DIR, ".exempt.json")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -128,6 +130,30 @@ def save_config(cfg):
                    "max_mb": _clamp(cfg.get("max_mb"), 10, 5000, DEFAULT_CONFIG["max_mb"]),
                    "max_files": _clamp(cfg.get("max_files"), 1, 999, DEFAULT_CONFIG["max_files"])},
                   f, ensure_ascii=False)
+
+def load_exempt() -> dict:
+    """读取免交名单 {文件夹名: [姓名...]}。
+    按文件夹独立保存, 长期有效(落盘 .exempt.json), 只影响该文件夹的核对口径。"""
+    try:
+        data = json.load(open(EXEMPT_FILE, encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): [str(x) for x in v if str(x).strip()]
+                    for k, v in data.items() if isinstance(v, list)}
+    except (OSError, ValueError):
+        pass
+    return {}
+
+def save_exempt(data: dict):
+    """原子写入免交名单(先写临时文件再替换, 避免半截 JSON)"""
+    tmp = EXEMPT_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, EXEMPT_FILE)
+
+def exempt_of(folder: str, roster: list) -> list:
+    """取该文件夹的免交名单(只保留仍在名单里的人, 顺序按名单)"""
+    cur = set(load_exempt().get(folder, []))
+    return [n for n in roster if n in cur]
 
 def today_str() -> str:
     """当天日期, 格式 年.月.日(不补零)"""
@@ -1471,6 +1497,26 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .cfilter{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
 .cfilter .lbl{font-size:13px;font-weight:700;color:#5a6a81}
 .cfilter select{min-width:200px;max-width:100%;font-size:14px}
+/* 免交名单 */
+.exchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.exchip{font-weight:700;font-size:13.5px;color:#6b5414;padding:6px 12px;border-radius:10px;
+ background:rgba(255,190,80,.16);border:1px solid rgba(255,190,80,.45)}
+.exnone{font-size:13px;color:#8a97ab}
+.exwrap summary{cursor:pointer;font-size:13.5px;font-weight:700;color:#3a56b8;
+ padding:7px 0;user-select:none}
+.exwrap summary:hover{color:#28409a}
+.exgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+ gap:6px;margin:10px 0 14px}
+.exchk{display:flex;align-items:center;gap:7px;font-size:13.5px;padding:8px 10px;
+ border-radius:10px;cursor:pointer;background:rgba(255,255,255,.45);
+ border:1px solid rgba(255,255,255,.75);transition:.15s}
+.exchk:hover{background:#fff}
+.exchk input{width:15px;height:15px;accent-color:#4f7cff;flex-shrink:0}
+.exchk:has(input:checked){background:rgba(255,190,80,.18);border-color:rgba(255,190,80,.55)}
+.exbtns{display:flex;gap:10px}
+.exbadge{color:#8a6d1a;background:rgba(255,190,80,.18);border:1px solid rgba(255,190,80,.45);
+ padding:1px 7px;border-radius:99px}
+.okrow.exempted{background:rgba(255,190,80,.08);border-color:rgba(255,190,80,.35)}
 @media(max-width:600px){
  body{padding:16px 12px 40px}
  h1{font-size:25px}
@@ -1496,8 +1542,24 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
   <div><div class=num>__N__</div><div class=cap>应交人数</div></div>
   <div><div class=num style="color:#2e7d5b">__OK__</div><div class=cap>已交</div></div>
   <div><div class=num style="color:#c0392b">__MISS__</div><div class=cap>未交</div></div>
+  __EXSTAT__
  </div>
  <div class=bar2><i style="width:__PCT__%"></i></div>
+</section>
+
+<section class="glass panel">
+ <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/></svg>免交名单（__EXCNT__ 人）</h3>
+ <p class=foot>被设为免交的同学<b>不计入「应交 / 未交」</b>。<b>只对当前文件夹生效</b>，保存后长期有效（重启不会丢）。</p>
+ <div class=exchips>__EXCHIPS__</div>
+ <details class=exwrap>
+  <summary>编辑免交名单（勾选后保存）</summary>
+  <form method=post action=/admin/exempt>
+   <input type=hidden name=token value="__TOKEN__">
+   <input type=hidden name=folder value="__CURFOLDER__">
+   <div class=exgrid>__EXCHECKS__</div>
+   <div class=exbtns><button class=cta type=submit>保存免交名单</button></div>
+  </form>
+ </details>
 </section>
 
 <section class="glass panel">
@@ -1826,17 +1888,25 @@ def admin_check():
             continue
         files.append((rel, fn, p, mt, sz))
     submitted, matched, unknown = match_roster(roster, files)
-    n, ok, miss, unk = len(roster), len(submitted), 0, len(unknown)
-    missing = [x for x in roster if x not in submitted]
+    # 免交名单: 只对当前文件夹生效, 从「应交」和「未交」里扣除
+    exempt = exempt_of(folder, roster)
+    exset = set(exempt)
+    effective = [x for x in roster if x not in exset]
+    n = len(effective)                      # 应交人数 = 名单 - 免交
+    ok = sum(1 for x in effective if x in submitted)
+    unk = len(unknown)
+    missing = [x for x in effective if x not in submitted]
     miss = len(missing)
     pct = round(ok / n * 100) if n else 0
     if missing:
         missbox = ('<div class=miss>' + "".join(
-            f'<span class=mtag>🚫 {html.escape(x)}</span>' for x in missing) + '</div>')
+            f'<span class=mtag>{html.escape(x)}</span>' for x in missing) + '</div>')
+    elif n == 0:
+        missbox = '<div class="allok b">当前文件夹已全部设为免交，无需核对</div>'
     else:
         missbox = '<div class="allok g">全部交齐，无一遗漏！</div>'
     okrows = ""
-    for name in roster:
+    for name in effective:
         if name in submitted:
             fl = submitted[name]
             cls = "okrow multi" if len(fl) > 1 else "okrow"
@@ -1844,7 +1914,17 @@ def admin_check():
             okrows += (f'<div class="{cls}"><span class=nm>{html.escape(name)}'
                        f'<span class=cnt>{len(fl)} 个文件</span></span>'
                        f'<span class=fl>{fl_html}</span></div>')
-    okbox = okrows or '<div class="allok b">当前范围内还没有任何人交文件</div>'
+    # 免交了但确实提交了的人: 不计入统计, 只在已交明细里标注
+    ex_sub = [x for x in exempt if x in submitted]
+    for name in ex_sub:
+        fl_html = "<br>".join(html.escape(x) for x in submitted[name])
+        okrows += (f'<div class="okrow exempted"><span class=nm>{html.escape(name)}'
+                   f'<span class="cnt exbadge">免交·已提交</span></span>'
+                   f'<span class=fl>{fl_html}</span></div>')
+    exnote = (f'<p class=foot>另有 {len(ex_sub)} 位已设为免交，但他们确实提交了，'
+              '不计入统计，仅在此标注。</p>') if ex_sub else ""
+    okbox = ((exnote + okrows) if okrows
+             else '<div class="allok b">当前范围内还没有任何人交文件</div>')
     if unknown:
         unkbox = "".join(
             f'<div class=unkrow><span class=fn>{html.escape(fn)}</span>'
@@ -1859,6 +1939,15 @@ def admin_check():
         f'{html.escape(f)}</option>' for f in folders)
     note = ('<br><span style="color:#b8860b;font-size:13px">⚠️ 当前文件夹下没有任何文件，因此所有人都计入未交</span>'
             if not files else "")
+    # 免交名单 UI: 已选标签 + 可展开的全员勾选框(默认收起, 不挤压报告)
+    exchips = ("".join(f'<span class=exchip>{html.escape(x)}</span>' for x in exempt)
+               or '<span class=exnone>当前文件夹还没有免交的同学</span>')
+    exchecks = "".join(
+        f'<label class=exchk><input type=checkbox name=names '
+        f'value="{html.escape(x)}"{" checked" if x in exset else ""}>'
+        f'<span>{html.escape(x)}</span></label>' for x in roster)
+    exstat = (f'<div><div class=num style="color:#b8860b">{len(exempt)}</div>'
+              f'<div class=cap>免交（不计入应交）</div></div>' if exempt else "")
     page = (CHECK_TPL
             .replace("__SCOPE__", scope)
             .replace("__NOTE__", note)
@@ -1871,9 +1960,35 @@ def admin_check():
             .replace("__MISSBOX__", missbox)
             .replace("__OKBOX__", okbox)
             .replace("__UNKBOX__", unkbox)
+            .replace("__EXSTAT__", exstat)
+            .replace("__EXCNT__", str(len(exempt)))
+            .replace("__EXCHIPS__", exchips)
+            .replace("__EXCHECKS__", exchecks)
+            .replace("__CURFOLDER__", html.escape(folder))
             .replace("__TOKEN__", ADMIN_TOKEN)
             .replace("__BACK__", f"folder={quote(folder)}"))
     return no_store(Response(page, mimetype="text/html"))
+
+@app.post("/admin/exempt")
+def admin_exempt():
+    """保存某个文件夹的免交名单(整体覆盖)。
+    只对该文件夹的核对口径生效(逾期应交/未交自动扣除), 长期落盘保存。"""
+    if not is_admin():
+        abort(401)
+    folder = (request.form.get("folder") or "").strip()
+    if folder not in list_folders():
+        abort(400, "文件夹不存在")
+    roster = load_roster()
+    order = {n: i for i, n in enumerate(roster)}
+    picked = [n.strip() for n in request.form.getlist("names")]
+    picked = sorted({n for n in picked if n in roster}, key=lambda n: order.get(n, 9999))
+    data = load_exempt()
+    if picked:
+        data[folder] = picked
+    else:
+        data.pop(folder, None)      # 全不勾 = 清空该文件夹的免交设置
+    save_exempt(data)
+    return redirect(f"/admin/check?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
 def folder_files(folder: str):
     """收集某文件夹(或全部)下的所有文件 [(rel, fn, path)]; all 时含各子目录"""

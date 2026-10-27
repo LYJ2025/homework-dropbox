@@ -4,6 +4,7 @@ uploads/
 .roster
 .upload_config
 .announcement
+.exempt.json
 *.pem
 
 # Python
