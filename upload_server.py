@@ -592,11 +592,13 @@ function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error
 drop.onclick=()=>pick.click();
 pick.onchange=()=>{addFiles(pick.files);pick.value='';};
 // 移动端: 部分浏览器把 accept="*/*" 当成"无限制"后只给相机/相册, 没有「文件」。
-// 改成明确的文档类型后系统才会出现「文件」入口; 图片/视频走单独按钮。
+// 关键: 这里**只能列文档类型**, 一旦混进 .jpg/.png/.mp4 这类媒体类型,
+// 安卓系统会把 accept 归并成 image/*+video/*, 弹窗就退化成「相机/摄像机/照片和视频」,
+// 「文件」入口再次消失(作业场景只需要文档, 图片请从「文件」里进相册目录选)。
 (function(){
  if(!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||''))return;
  pick.setAttribute('accept',
-  '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml,.jpg,.jpeg,.png,.gif,.webp,.bmp,.heic,.mp4,.mov,.avi,.mkv,.mp3,.wav,.m4a');
+  '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml');
 })();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
 drop.ondragleave=()=>drop.classList.remove('on');
