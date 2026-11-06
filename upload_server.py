@@ -591,12 +591,16 @@ function totalBytes(){return queue.reduce((s,t)=>s+t.file.size,0)}
 function sentBytes(){return queue.reduce((s,t)=>s+(t.finished&&t.status!=='error'?t.file.size:(t.status==='uploading'?t.file.size*t.pct/100:0)),0)}
 drop.onclick=()=>pick.click();
 pick.onchange=()=>{addFiles(pick.files);pick.value='';};
-// 移动端: 部分浏览器把 accept="*/*" 当成"无限制"后只给相机/相册, 没有「文件」。
-// 关键: 这里**只能列文档类型**, 一旦混进 .jpg/.png/.mp4 这类媒体类型,
-// 安卓系统会把 accept 归并成 image/*+video/*, 弹窗就退化成「相机/摄像机/照片和视频」,
-// 「文件」入口再次消失(作业场景只需要文档, 图片请从「文件」里进相册目录选)。
+// 移动端 accept 策略分两种环境(实测差异很大, 不能一刀切):
+// 1) 微信内置浏览器(安卓 X5 / iOS WKWebView): 不解析扩展名白名单, 只认 image/* video/* */* 这类粗粒度 MIME。
+//    给它扩展名列表会被当成"未知类型", 菜单退化成只剩拍照/相册。所以微信里必须用 */*,
+//    它会给出自己的完整菜单: 拍照 / 从相册选择 / 从微信聊天记录选择文件。
+// 2) 其他手机浏览器: 必须用明确的文档扩展名列表; 一旦混进 .jpg/.png/.mp4 这类媒体类型,
+//    安卓会把 accept 归并成 image/*+video/*, 「文件」入口就消失了。
 (function(){
- if(!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||''))return;
+ var ua=navigator.userAgent||'';
+ if(!/Android|iPhone|iPad|iPod|Mobile/i.test(ua))return;
+ if(/MicroMessenger/i.test(ua)){ pick.setAttribute('accept','*/*'); return; }
  pick.setAttribute('accept',
   '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml');
 })();
