@@ -331,6 +331,23 @@ def list_folders():
                   if os.path.isdir(os.path.join(UPLOAD_DIR, d))
                   and not d.startswith("."))
 
+def folder_ym(name: str) -> str:
+    """文件夹的创建年月, 格式 'YYYY-MM'。
+    优先用 birth time(Linux 走 statx / macOS 原生支持), 取不到再退回修改时间。
+    注意: 目录 mtime 会在增减文件时变化, 所以只在拿不到创建时间时兜底。"""
+    p = os.path.join(UPLOAD_DIR, name)
+    try:
+        st = os.stat(p)
+    except OSError:
+        return ""
+    ts = getattr(st, "st_birthtime", 0) or 0
+    if not ts or ts > time.time() + 86400:   # 无创建时间 or 明显异常
+        ts = st.st_mtime
+    try:
+        return time.strftime("%Y-%m", time.localtime(ts))
+    except (ValueError, OSError):
+        return ""
+
 def iter_all_files():
     """扫描全部文件 [(rel, fn, path, mtime, size)]; rel='' 表示未分类(根目录)。
     跳过以 . 开头的隐藏文件(.DS_Store / Thumbs.db 之类系统垃圾), 免得混进列表和核对。"""
@@ -441,6 +458,13 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 .tool{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:13px 16px;margin-bottom:14px}
 .tool label{font-size:13px;color:#5a6a81;font-weight:600}
 .tool select{flex:1;min-width:110px;padding:9px 10px;font-size:14px}
+.tsel{display:flex;align-items:center;gap:8px;flex:1 1 240px;min-width:0}
+.tsel label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.tsel select{min-width:0}
+.tsel-ym{flex:0 1 220px}
+.tsel-ym select{flex:1 1 0;min-width:66px}
+.ymhint{display:none;font-size:12.5px;color:#8a97ab;margin:-6px 2px 12px}
+.ymhint.show{display:block}
 .drop{padding:38px 20px;text-align:center;cursor:pointer;transition:all .25s ease}
 .drop:hover{transform:translateY(-2px)}
 .drop.on{background:rgba(255,255,255,.72);transform:scale(1.02);
@@ -523,8 +547,10 @@ __EMBED_CSS__
 <p class=sub>支持一次选择多个文件 · 文档 / 表格 / 压缩包 / 图片</p>
 __ANNOUNCE__
 <div class="glass tool">
- <span><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</label><select id=folder>__FOLDERS__</select></span>
+ <span class=tsel><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</label><select id=folder>__FOLDERS__</select></span>
+ <span class="tsel tsel-ym"><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></svg>年月</label><select id=fy title="按年份筛选文件夹">__YEARS__</select><select id=fm title="按月份筛选文件夹">__MONTHS__</select></span>
 </div>
+<p class=ymhint id=ymhint></p>
 <div class="glass drop" id=drop>
  <div class=ico><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="url(#ig)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="ig" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f7cff"/><stop offset="1" stop-color="#8a5cff"/></linearGradient></defs><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg></div>
  <b>点击选择文件（可多选）</b>
@@ -603,6 +629,47 @@ pick.onchange=()=>{addFiles(pick.files);pick.value='';};
  if(/MicroMessenger/i.test(ua)){ pick.setAttribute('accept','*/*'); return; }
  pick.setAttribute('accept',
   '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.csv,.zip,.rar,.7z,.tar,.gz,.wps,.et,.dps,.odt,.ods,.odp,.c,.cpp,.h,.py,.java,.js,.json,.html,.css,.sql,.ipynb,.tex,.go,.rs,.php,.xml,.yaml,.yml');
+})();
+// 文件夹按「年月」筛选: 默认只列当前年、当前月创建的文件夹。
+// 若当月一个文件夹都没有(月初还没建任务), 自动退回"全部", 否则学生选不到文件夹、交不了作业。
+(function(){
+ var fy=document.getElementById('fy'),fm=document.getElementById('fm'),
+     fs=document.getElementById('folder'),hint=document.getElementById('ymhint');
+ if(!fy||!fm||!fs)return;
+ var src=Array.prototype.slice.call(fs.querySelectorAll('option[data-ym]'))
+   .map(function(o){return {v:o.value,t:o.textContent,ym:o.dataset.ym||''}});
+ if(!src.length){if(hint){hint.textContent='还没有任何文件夹，请联系老师新建';hint.classList.add('show')}return}
+ var now=new Date(),
+     curY=String(now.getFullYear()),
+     curM=('0'+(now.getMonth()+1)).slice(-2),
+     fellBack=false;
+ function render(){
+  var y=fy.value,m=fm.value,prev=fs.value;
+  var list=src.filter(function(o){
+   if(!o.ym)return y==='all'&&m==='all';
+   if(y!=='all'&&o.ym.slice(0,4)!==y)return false;
+   if(m!=='all'&&o.ym.slice(5,7)!==m)return false;
+   return true;
+  });
+  while(fs.firstChild)fs.removeChild(fs.firstChild);
+  var ph=document.createElement('option');
+  ph.value='';ph.disabled=true;ph.selected=true;ph.textContent='请选择文件夹';
+  fs.appendChild(ph);
+  list.forEach(function(o){
+   var e=document.createElement('option');e.value=o.v;e.textContent=o.t;fs.appendChild(e);
+  });
+  fs.value=list.some(function(o){return o.v===prev})?prev:'';
+  if(hint){
+   if(!list.length){hint.textContent='所选年月没有文件夹，请换个年月，或选「全部」';hint.classList.add('show')}
+   else if(fellBack){hint.textContent='当前年月暂无新建文件夹，已自动显示全部';hint.classList.add('show')}
+   else {hint.textContent='';hint.classList.remove('show')}
+  }
+  return list.length;
+ }
+ fy.value=[].some.call(fy.options,function(o){return o.value===curY})?curY:'all';
+ fm.value=curM;
+ if(!render()){fellBack=true;fy.value='all';fm.value='all';render()}
+ fy.onchange=fm.onchange=function(){fellBack=false;render()};
 })();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
 drop.ondragleave=()=>drop.classList.remove('on');
@@ -807,9 +874,18 @@ render();
 def index_html(embed: bool = False) -> str:
     # 不再提供"未分类(根目录)"选项: 必须选择文件夹才能提交;
     # 默认项为不可选中的提示项, 防止绕过界面直接提交到根目录
+    folders = list_folders()
+    yms = {d: folder_ym(d) for d in folders}
     opts = '<option value="" selected disabled>请选择文件夹</option>'
-    for d in list_folders():
-        opts += f'<option value="{html.escape(d)}">{html.escape(d)}</option>'
+    for d in folders:
+        opts += (f'<option value="{html.escape(d)}" data-ym="{yms[d]}">'
+                 f'{html.escape(d)}</option>')
+    # 年/月 筛选: 年 = 实际出现过的年份; 月 = 01..12
+    years = sorted({ym[:4] for ym in yms.values() if ym}, reverse=True)
+    year_opts = '<option value="all">全部</option>' + "".join(
+        f'<option value="{y}">{y}</option>' for y in years)
+    month_opts = '<option value="all">全部</option>' + "".join(
+        f'<option value="{m:02d}">{m}</option>' for m in range(1, 13))
     ann = load_announcement()
     if ann:
         announce = ('<div class="glass announce">'
@@ -833,6 +909,8 @@ def index_html(embed: bool = False) -> str:
         max_mb_v, max_files_v, admin_mode = str(cfg["max_mb"]), str(cfg["max_files"]), "false"
         embed_css = ""
     return (INDEX_TPL.replace("__FOLDERS__", opts)
+            .replace("__YEARS__", year_opts)
+            .replace("__MONTHS__", month_opts)
             .replace("__ANNOUNCE__", announce)
             .replace("__LIMIT_HINT__", limit_hint)
             .replace("__MAX_MB__", max_mb_v)
