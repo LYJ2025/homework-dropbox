@@ -18,6 +18,13 @@ ANNOUNCE_FILE = os.path.join(DATA_DIR, ".announcement")
 CONFIG_FILE = os.path.join(DATA_DIR, ".upload_config")
 # 免交名单: {文件夹名: [姓名...]} —— 按文件夹独立, 长期持久化(不随重启丢失)
 EXEMPT_FILE = os.path.join(DATA_DIR, ".exempt.json")
+# 默认班级(名单未写班级时用它)
+CLASS_FILE = os.path.join(DATA_DIR, ".class_default")
+DEFAULT_CLASS = "2026级信息安全班"
+# 文件夹专属命名模板: {"文件夹名": "班级 姓名 学号"} —— 覆盖全局模板
+FOLDER_TPL_FILE = os.path.join(DATA_DIR, ".folder_tpl.json")
+# 文件夹创建年月: {"文件夹名": "YYYY-MM"} —— 建夹时写入, 不随里面的文件增删漂移
+FOLDER_META_FILE = os.path.join(DATA_DIR, ".folder_meta.json")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 if not os.path.exists(TOKEN_FILE):
@@ -33,22 +40,36 @@ def split_names(txt: str):
     每行格式: 「姓名」或「姓名 学号」或「学号 姓名」, 学号自动剔除。"""
     return [name for name, _ in parse_roster(txt)]
 
-def parse_roster(txt: str):
-    """名单文本按行解析为 [(姓名, 学号), ...]; 学号可为 ''(未提供)。
-    每行: 姓名与学号用空格/制表符/逗号分隔, 顺序不限; 姓名去重保序。"""
+def parse_roster_full(txt: str):
+    """名单文本按行解析为 [(姓名, 学号, 班级), ...]; 学号/班级可为 ''(未提供)。
+    每行: 姓名、学号、班级用空格/制表符/逗号分隔, 顺序不限。
+    班级的判定: 长度≥3 且含「班」或「级」(如 2026级信息安全班), 其余非数字段并入姓名。
+    姓名去重保序。"""
     out, seen = [], set()
     for line in (txt or "").splitlines():
         line = line.strip()
         if not line:
             continue
-        toks = re.split(r"[\s,，;；\t]+", line)
+        toks = [t for t in re.split(r"[\s,，;；\t]+", line) if t]
         digits = [t for t in toks if t.isdigit()]
-        name = "".join(t for t in toks if t and not t.isdigit())
+        cls, rest = "", []
+        for t in toks:
+            if t.isdigit():
+                continue
+            if not cls and len(t) >= 3 and ("班" in t or "级" in t):
+                cls = t
+            else:
+                rest.append(t)
+        name = "".join(rest)
         sid = digits[0] if digits else ""
         if name and name not in seen:
             seen.add(name)
-            out.append((name, sid))
+            out.append((name, sid, cls))
     return out
+
+def parse_roster(txt: str):
+    """兼容旧接口: [(姓名, 学号), ...]"""
+    return [(n, s) for n, s, _ in parse_roster_full(txt)]
 
 def load_roster_pairs():
     """应交名单(姓名, 学号)配对; 学号为空表示该行未提供学号"""
@@ -61,6 +82,39 @@ def load_roster_pairs():
 def load_roster():
     """应交名单: 仅姓名(去重保序)"""
     return [n for n, _ in load_roster_pairs()]
+
+# ---------- 班级(用于命名模板里的「班级」关键字) ----------
+def load_default_class() -> str:
+    """默认班级: 名单里没写班级时用它"""
+    try:
+        v = open(CLASS_FILE, encoding="utf-8").read().strip()
+        return v[:40] or DEFAULT_CLASS
+    except OSError:
+        return DEFAULT_CLASS
+
+def save_default_class(v: str):
+    """保存默认班级; 留空则恢复内置默认"""
+    v = (v or "").strip()[:40]
+    try:
+        if v:
+            with open(CLASS_FILE, "w", encoding="utf-8") as f:
+                f.write(v)
+        else:
+            os.remove(CLASS_FILE)
+    except OSError:
+        pass
+
+def class_map() -> dict:
+    """{姓名: 班级}; 名单第3列为准, 该行没写班级则用默认班级"""
+    dflt = load_default_class()
+    try:
+        txt = open(ROSTER_FILE, encoding="utf-8").read()
+    except OSError:
+        return {}
+    return {n: (c or dflt) for n, _s, c in parse_roster_full(txt)}
+
+def class_of(name: str) -> str:
+    return class_map().get(name) or load_default_class()
 
 # ---------- 公告栏 ----------
 def load_announcement():
@@ -100,7 +154,7 @@ def _clamp(v, lo, hi, default):
 DEFAULT_CONFIG = {"recognize": True, "normalize": True,
                   "template": "学号 姓名",
                   "max_mb": 200, "max_files": 20}
-TPL_KEYWORDS = ("姓名", "学号", "文件名称", "日期")
+TPL_KEYWORDS = ("班级", "姓名", "学号", "文件名称", "日期")
 
 def load_config():
     """读取上传配置; 文件缺失/损坏时回退默认值"""
@@ -160,20 +214,56 @@ def today_str() -> str:
     t = time.localtime()
     return f"{t.tm_year}.{t.tm_mon}.{t.tm_mday}"
 
-def render_template(tpl: str, rname: str, sid: str, stem: str) -> str:
-    """把模板里的四个关键字替换为实际值, 其余字符(连接符号)原样保留。
-    例: 模板「姓名_学号 文件名称」+ 张三/17/example → 「张三_17 example」"""
+def render_template(tpl: str, rname: str, sid: str, stem: str,
+                    cls: str = "") -> str:
+    """把模板里的五个关键字替换为实际值, 其余字符(连接符号)原样保留。
+    例: 模板「班级 姓名 学号」+ 2026级信息安全班/张三/17 → 「2026级信息安全班 张三 17」"""
     out = tpl
-    for k, v in (("姓名", rname), ("学号", sid),
-                 ("文件名称", stem), ("日期", today_str())):
-        out = out.replace(k, v)
-    return out.strip()
+    for k, v in (("班级", cls), ("文件名称", stem), ("姓名", rname),
+                 ("学号", sid), ("日期", today_str())):
+        out = out.replace(k, v or "")
+    return re.sub(r"\s{2,}", " ", out).strip()
 
 def template_valid(tpl: str) -> bool:
     """模板合法性: 至少含一个关键字, 且不含文件系统非法字符"""
     if not any(k in tpl for k in TPL_KEYWORDS):
         return False
     return not re.search(r'[\\/:*?"<>|\r\n\t]', tpl)
+
+# ---------- 文件夹专属命名模板 ----------
+def load_folder_tpls() -> dict:
+    """{文件夹名: 模板}; 只保留合法模板"""
+    try:
+        data = json.load(open(FOLDER_TPL_FILE, encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v).strip() for k, v in data.items()
+                    if str(v).strip()}
+    except (OSError, ValueError):
+        pass
+    return {}
+
+def save_folder_tpls(d: dict):
+    """原子写入"""
+    tmp = FOLDER_TPL_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, FOLDER_TPL_FILE)
+
+def tpl_for(folder: str) -> str:
+    """该文件夹实际生效的模板: 文件夹专属 > 全局默认"""
+    folder = (folder or "").strip()
+    if folder:
+        t = load_folder_tpls().get(folder, "").strip()
+        if t:
+            return t
+    return load_config()["template"]
+
+def folder_of_path(p: str) -> str:
+    """文件路径所属的文件夹名; 在 uploads 根目录则返回 ''"""
+    d = os.path.abspath(os.path.dirname(p or ""))
+    if d == os.path.abspath(UPLOAD_DIR):
+        return ""
+    return os.path.basename(d)
 
 def _norm(s: str) -> str:
     """匹配用归一化: 去掉所有空白"""
@@ -192,49 +282,69 @@ def name_candidate(fn: str) -> str:
         stem = stem[m.end():]
     return stem.strip()
 
-def match_roster(roster, files):
-    """两遍匹配: 先精确(学号后的姓名部分与名单完全一致), 后子串兜底。
+def identify(fn: str, pairs):
+    """从文件名识别同学, 返回 ((姓名, 学号) or None, 原因)。
+    按可靠性依次尝试(只认名单里有学号的人):
+      ① 文件名里出现名单中的学号(连续 ≥8 位数字) —— 最可靠, 不受姓名相似的干扰
+      ② 文件名包含名单姓名(唯一命中; 多个命中时取最长姓名, 避免「张三/张三四」这类包含关系错配)
+      ③ 旧规则兜底: 剥离开头学号后的剩余部分当姓名, 与名单精确比对
+    返回原因: ok-id / ok-name / ok-old / ambiguous / unknown / noid"""
+    if not pairs:
+        return None, "noid"
+    sid2name = {s: n for n, s in pairs if s}
+    if not sid2name:
+        return None, "noid"
+    stem = os.path.splitext(fn or "")[0]
+    stem = re.sub(r"\(\s*\d+\s*\)$", "", stem).strip()
+    # ① 学号
+    for m in re.finditer(r"\d{8,}", stem):
+        nm = sid2name.get(m.group(0))
+        if nm:
+            return (nm, m.group(0)), "ok-id"
+    # ② 姓名(最长优先)
+    nf = _norm(stem)
+    hits = [(n, s) for n, s in pairs if s and _norm(n) and _norm(n) in nf]
+    if hits:
+        mx = max(len(_norm(n)) for n, _ in hits)
+        top = [(n, s) for n, s in hits if len(_norm(n)) == mx]
+        if len(top) == 1:
+            return top[0], "ok-name"
+        return None, "ambiguous"
+    # ③ 旧规则兜底
+    cand = _norm(name_candidate(fn))
+    if cand:
+        hit = [(n, s) for n, s in pairs if s and _norm(n) == cand]
+        if len(hit) == 1:
+            return hit[0], "ok-old"
+    return None, "unknown"
+
+def match_roster(roster, files, pairs=None):
+    """核对用匹配: 按 identify 认人, 认不出再退回「文件名含姓名」兜底。
     返回 (submitted: {姓名: [文件名...]}, matched_fns: set, unknown: [(rel,fn)...])"""
+    pairs = pairs if pairs is not None else [(n, "") for n in roster]
     submitted, matched = {}, set()
-    # 第一遍: 提取姓名候选, 与名单精确匹配
     for rel, fn, p, mt, sz in files:
-        cand = _norm(name_candidate(fn))
-        if not cand:
-            continue
-        for name in roster:
-            if _norm(name) == cand:
-                submitted.setdefault(name, []).append(fn)
-                matched.add(fn)
-                break
-    # 第二遍: 未匹配的文件用子串兜底(应对"姓名+作业名"等非标准命名)
-    for rel, fn, p, mt, sz in files:
-        if fn in matched:
-            continue
-        nf = _norm(fn)
-        for name in roster:
-            nn = _norm(name)
-            if nn and nn in nf:
-                submitted.setdefault(name, []).append(fn)
-                matched.add(fn)
-                break
+        who, _why = identify(fn, pairs)
+        name = who[0] if who else ""
+        if not name:
+            nf = _norm(fn)
+            cands = [n for n in roster if _norm(n) and _norm(n) in nf]
+            if len(cands) == 1:
+                name = cands[0]
+            elif cands:
+                mx = max(len(_norm(n)) for n in cands)
+                top = [n for n in cands if len(_norm(n)) == mx]
+                name = top[0] if len(top) == 1 else ""
+        if name and name in roster:
+            submitted.setdefault(name, []).append(fn)
+            matched.add(fn)
     unknown = [(rel, fn) for rel, fn, p, mt, sz in files if fn not in matched]
     return submitted, matched, unknown
 
 def recognize_student(fn: str, pairs):
     """从文件名识别同学: 返回 ((姓名, 学号) or None, 原因)。
-    与核对功能同源: 先精确(剥离学号前缀后的姓名部分)后子串兜底, 必须唯一命中。"""
-    if not any(sid for _, sid in pairs):
-        return None, "noid"
-    cand = _norm(name_candidate(fn))
-    if not cand:
-        return None, "unknown"
-    hits = [(n, sid) for n, sid in pairs if _norm(n) == cand and sid]
-    if not hits:
-        nf = _norm(fn)
-        hits = [(n, sid) for n, sid in pairs if sid and _norm(n) in nf]
-    if len(hits) != 1:
-        return None, ("ambiguous" if hits else "unknown")
-    return hits[0], "ok"
+    与核对功能同源(共用 identify): 学号优先 → 姓名最长匹配 → 旧规则兜底。"""
+    return identify(fn, pairs)
 
 def student_files_in(target_dir: str, fn: str, pairs):
     """target_dir 内与 fn 同名(去后缀, 不区分大小写)或属于同一同学的所有文件路径。
@@ -257,12 +367,13 @@ def student_files_in(target_dir: str, fn: str, pairs):
             out.append(fp)
     return out
 
-def normalize_plan(name: str, pairs, cur_path: str):
-    """按管理端配置的模板计算规范文件名。
-    识别引擎与核对功能同源: 先精确(剥离学号前缀后的姓名部分)后子串兜底,
-    且必须唯一命中一个「有学号」的名单成员才动手。
-    模板可用关键字: 姓名/学号/文件名称/日期(当天, 年.月.日), 可自行排序和
-    添加连接符号; 例「姓名_学号 文件名称」→「张三_17 example」。
+def normalize_plan(name: str, pairs, cur_path: str, folder: str = None,
+                   chosen: str = ""):
+    """按生效模板(文件夹专属 > 全局)计算规范文件名。
+    识别顺序: ①前端已确认的身份(chosen, 学生在「你是谁？」里选的) 优先 —— 这是本人
+    明确声明过的身份, 用来兜底「文件名乱七八糟」和「选错人后改主意」两种情况;
+    ②文件名识别(identify: 学号优先, 其次姓名最长匹配)。
+    folder 为 None 时从 cur_path 推断。
     返回 (新文件名 or None, 原因):
       None+'off'      管理端关闭了自动规范化
       None+'canonical' 已是模板渲染出的形式(含 (n) 变体), 不动
@@ -277,11 +388,19 @@ def normalize_plan(name: str, pairs, cur_path: str):
     if not any(sid for _, sid in pairs):
         return None, "noid"
     who, why = recognize_student(name, pairs)
+    # 前端确认过的身份优先(只认名单里「有学号」的人)
+    if chosen:
+        hit = [(n, s) for n, s in pairs if n == chosen and s]
+        if len(hit) == 1:
+            who = hit[0]
     if not who:
         return None, why
     rname, sid = who
+    if folder is None:
+        folder = folder_of_path(cur_path)
     stem, ext = os.path.splitext(name)
-    target = render_template(cfg["template"], rname, sid, stem) + ext
+    target = render_template(tpl_for(folder), rname, sid, stem,
+                             class_of(rname)) + ext
     if target == name:
         return None, "canonical"
     # 目标名已存在(且不是自己)时加 (n) 序号, 绝不覆盖
@@ -301,11 +420,15 @@ def normalize_plan(name: str, pairs, cur_path: str):
         return None, "canonical"
     return target, "ok"
 
-def auto_normalize(target_dir: str, name: str):
-    """上传后自动规范化: 按管理端模板把识别出身份的文件改成标准命名。
+def auto_normalize(target_dir: str, name: str, chosen: str = ""):
+    """上传后自动规范化: 按该文件夹生效的模板把识别出身份的文件改成标准命名。
+    chosen 是同学在「你是谁？」里确认的姓名, 用来兜底文件名认不出人的情况。
     管理端关闭 / 认不出是谁 / 名单无学号时原样返回。"""
     pairs = load_roster_pairs()
-    new, why = normalize_plan(name, pairs, os.path.join(target_dir, name))
+    folder = ("" if os.path.abspath(target_dir) == os.path.abspath(UPLOAD_DIR)
+              else os.path.basename(target_dir))
+    new, why = normalize_plan(name, pairs, os.path.join(target_dir, name),
+                              folder, chosen)
     if new:
         os.rename(os.path.join(target_dir, name), os.path.join(target_dir, new))
         return new
@@ -331,10 +454,64 @@ def list_folders():
                   if os.path.isdir(os.path.join(UPLOAD_DIR, d))
                   and not d.startswith("."))
 
+def default_folder() -> str:
+    """管理页默认展示的文件夹: 最近有变动的那个(通常就是当前这次作业)"""
+    fs = list_folders()
+    if not fs:
+        return "all"
+    def _mt(d):
+        try:
+            return os.path.getmtime(os.path.join(UPLOAD_DIR, d))
+        except OSError:
+            return 0
+    return max(fs, key=_mt)
+
+def load_folder_meta() -> dict:
+    """{文件夹名: 'YYYY-MM'}; 建文件夹时写入, 之后不随内部文件增删变化"""
+    try:
+        data = json.load(open(FOLDER_META_FILE, encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v).strip()[:7] for k, v in data.items()
+                    if str(v).strip()}
+    except (OSError, ValueError):
+        pass
+    return {}
+
+def save_folder_meta(d: dict):
+    """原子写入"""
+    tmp = FOLDER_META_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1, sort_keys=True)
+    os.replace(tmp, FOLDER_META_FILE)
+
+def set_folder_meta(name: str, ym: str = ""):
+    """记录文件夹的创建年月(默认当前年月)"""
+    d = load_folder_meta()
+    d[name] = (ym or time.strftime("%Y-%m"))[:7]
+    save_folder_meta(d)
+
+def drop_folder_meta(name: str):
+    d = load_folder_meta()
+    if d.pop(name, None) is not None:
+        save_folder_meta(d)
+
+def rename_folder_meta(old: str, new: str):
+    """文件夹改名时把记录一起搬过去"""
+    d = load_folder_meta()
+    if old in d:
+        d[new] = d.pop(old)
+        save_folder_meta(d)
+
 def folder_ym(name: str) -> str:
-    """文件夹的创建年月, 格式 'YYYY-MM'。
-    优先用 birth time(Linux 走 statx / macOS 原生支持), 取不到再退回修改时间。
-    注意: 目录 mtime 会在增减文件时变化, 所以只在拿不到创建时间时兜底。"""
+    """文件夹所属年月 'YYYY-MM'。
+    只认建夹时写入的记录(见 .folder_meta.json)。没有记录时(老数据/外部拷贝进来的目录)
+    用文件系统时间推算一次并立即固化写盘, 之后永远按记录走——不再从文件夹名里猜日期,
+    也不会因为往里加/删文件而漂移。"""
+    name = name or ""
+    meta = load_folder_meta()
+    rec = meta.get(name)
+    if rec:
+        return rec
     p = os.path.join(UPLOAD_DIR, name)
     try:
         st = os.stat(p)
@@ -344,9 +521,15 @@ def folder_ym(name: str) -> str:
     if not ts or ts > time.time() + 86400:   # 无创建时间 or 明显异常
         ts = st.st_mtime
     try:
-        return time.strftime("%Y-%m", time.localtime(ts))
+        ym = time.strftime("%Y-%m", time.localtime(ts))
     except (ValueError, OSError):
         return ""
+    try:
+        meta[name] = ym
+        save_folder_meta(meta)               # 固化成记录, 以后不再变
+    except OSError:
+        pass
+    return ym
 
 def iter_all_files():
     """扫描全部文件 [(rel, fn, path, mtime, size)]; rel='' 表示未分类(根目录)。
@@ -465,6 +648,9 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
 .tsel-ym select{flex:1 1 0;min-width:66px}
 .ymhint{display:none;font-size:12.5px;color:#8a97ab;margin:-6px 2px 12px}
 .ymhint.show{display:block}
+.beian{text-align:center;font-size:12px;line-height:2;color:#8a97ab;margin-top:16px;padding-bottom:6px}
+.beian a{color:inherit;text-decoration:none}
+.beian a:hover{text-decoration:underline;color:#5a6a81}
 .drop{padding:38px 20px;text-align:center;cursor:pointer;transition:all .25s ease}
 .drop:hover{transform:translateY(-2px)}
 .drop.on{background:rgba(255,255,255,.72);transform:scale(1.02);
@@ -539,9 +725,135 @@ h1{font-size:34px;font-weight:800;text-align:center;margin-bottom:8px;
  .acts .cta{flex:1 1 100%}
  .acts .btn{flex:1}
 }
+/* 管理员入口(同学端左上角; 管理页内嵌上传页时由 __EMBED_CSS__ 隐藏) */
+.admbtn{position:fixed;top:14px;left:14px;z-index:60;display:inline-flex;align-items:center;gap:6px;
+ padding:7px 13px;border-radius:99px;font-family:inherit;font-size:12.5px;font-weight:700;
+ color:#5a6a81;cursor:pointer;background:rgba(255,255,255,.62);
+ border:1px solid rgba(255,255,255,.85);
+ box-shadow:0 3px 10px rgba(31,45,80,.10), inset 0 1px 0 rgba(255,255,255,.75);
+ backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.2s}
+.admbtn:hover{color:#31405e;background:rgba(255,255,255,.88);transform:translateY(-1px)}
+.admbtn .svgico{width:15px;height:15px}
+.admmask{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;
+ padding:20px;background:rgba(28,38,60,.36);
+ backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.admmask.show{display:flex}
+.admbox{position:relative;width:100%;max-width:356px;padding:26px 22px 20px;border-radius:22px}
+.admback{position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:3px;
+ padding:5px 10px 5px 7px;border-radius:99px;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.55);color:#5a6a81;font-family:inherit;font-size:12px;
+ font-weight:700;cursor:pointer;transition:.2s}
+.admback:hover{color:#31405e;background:rgba(255,255,255,.85)}
+.admback .svgico{width:14px;height:14px}
+.admtip{margin:28px 0 16px;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.75;
+ color:#8a6d1a;background:rgba(255,190,80,.12);border:1px solid rgba(255,190,80,.42)}
+.admrow{margin-bottom:12px}
+.admrow span{display:block;font-size:12.5px;font-weight:700;color:#5a6a81;margin-bottom:6px}
+.admrow input{width:100%;padding:11px 13px;border-radius:12px;font-family:inherit;font-size:14px;
+ color:#243049;outline:none;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.66);transition:.2s}
+.admrow input:focus{border-color:rgba(90,124,255,.6);box-shadow:0 0 0 3px rgba(90,124,255,.14)}
+.admrow input[readonly]{background:rgba(232,238,250,.85);color:#71809b;cursor:not-allowed}
+.admgo{width:100%;margin-top:4px;padding:12px;border-radius:14px;border:none;cursor:pointer;
+ font-family:inherit;font-size:14.5px;font-weight:800;color:#fff;
+ background:linear-gradient(135deg,#4f7cff,#8a5cff);
+ box-shadow:0 8px 20px rgba(80,110,255,.26);transition:.2s}
+.admgo:hover{filter:brightness(1.05)}
+.admgo:active{transform:translateY(1px)}
+.admgo:disabled{opacity:.65;cursor:not-allowed}
+.admerr{min-height:18px;margin:8px 0 0;font-size:12.5px;color:#c0392b;text-align:center}
+/* 右上角「你是谁？」与选姓名弹窗 */
+.whoami{position:fixed;top:14px;right:14px;z-index:60;display:inline-flex;align-items:center;gap:6px;
+ padding:7px 13px;border-radius:99px;font-family:inherit;font-size:12.5px;font-weight:700;
+ color:#5a6a81;cursor:pointer;background:rgba(255,255,255,.62);
+ border:1px solid rgba(255,255,255,.85);
+ box-shadow:0 3px 10px rgba(31,45,80,.10), inset 0 1px 0 rgba(255,255,255,.75);
+ backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.2s}
+.whoami:hover{color:#31405e;background:rgba(255,255,255,.88);transform:translateY(-1px)}
+.whoami.set{color:#2e7d5b;border-color:rgba(46,125,91,.35);background:rgba(236,250,244,.78)}
+.namemask{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;
+ padding:18px;background:rgba(28,38,60,.36);
+ backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.namemask.show{display:flex}
+.namebox{position:relative;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;
+ padding:26px 22px 22px;border-radius:22px}
+.namebox::-webkit-scrollbar{width:8px}
+.namebox::-webkit-scrollbar-thumb{background:rgba(120,140,180,.35);border-radius:99px}
+.nmadmin{position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:4px;
+ padding:5px 11px 5px 8px;border-radius:99px;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.55);color:#5a6a81;font-family:inherit;font-size:12px;
+ font-weight:700;cursor:pointer;transition:.2s}
+.nmadmin:hover{color:#31405e;background:rgba(255,255,255,.85)}
+.nmback{position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:2px;
+ padding:5px 10px 5px 6px;border-radius:99px;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.55);color:#5a6a81;font-family:inherit;font-size:12px;
+ font-weight:700;cursor:pointer;transition:.2s}
+.nmback:hover{color:#31405e;background:rgba(255,255,255,.85)}
+.nmadmin .svgico,.nmback .svgico{width:14px;height:14px}
+.nmtitle{text-align:center;font-size:23px;font-weight:800;color:#243049;
+ background:linear-gradient(120deg,#2b3a67,#5b4b9e 55%,#1f6f8b);
+ -webkit-background-clip:text;background-clip:text;color:transparent;margin:16px 0 6px}
+.nmsub{text-align:center;font-size:12.5px;color:#8a97ab;margin-bottom:16px;line-height:1.6}
+.nmcur{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;
+ width:fit-content;padding:6px 14px;border-radius:99px;background:rgba(79,124,255,.10);
+ color:#3a5bcc;font-size:13px;font-weight:700}
+.nmsec{font-size:12px;font-weight:700;color:#8a97ab;letter-spacing:.5px;margin:16px 0 9px}
+.surlist{display:flex;flex-wrap:wrap;gap:8px}
+.surbtn{min-width:50px;padding:9px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.6);font-family:inherit;font-size:15px;font-weight:700;
+ color:#31405e;cursor:pointer;transition:.15s;text-align:center}
+.surbtn:hover{background:rgba(255,255,255,.94);transform:translateY(-1px)}
+.surbtn.on{background:linear-gradient(135deg,#4f7cff,#8a5cff);color:#fff;border-color:transparent;
+ box-shadow:0 6px 16px rgba(80,110,255,.26)}
+.namelist{display:flex;flex-wrap:wrap;gap:8px}
+.nmbtn{padding:10px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.85);
+ background:rgba(255,255,255,.6);font-family:inherit;font-size:15px;font-weight:700;
+ color:#31405e;cursor:pointer;transition:.15s}
+.nmbtn:hover{background:rgba(255,255,255,.94);transform:translateY(-1px)}
+.nmbtn.cur{background:linear-gradient(135deg,#2e9d6b,#3fbd82);color:#fff;border-color:transparent;
+ box-shadow:0 6px 16px rgba(46,125,91,.26)}
+@media(max-width:600px){
+ .admbtn{top:10px;left:10px;padding:6px 11px}
+ .whoami{top:10px;right:10px;padding:6px 11px}
+ .surbtn{min-width:46px;padding:8px 11px;font-size:14.5px}
+ .nmbtn{padding:9px 14px;font-size:14.5px}
+}
 __EMBED_CSS__
 </style>
 <div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
+<button type=button class=admbtn id=admbtn title="管理员登录">
+ <svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></svg>管理员</button>
+<div class=admmask id=admmask>
+ <div class="glass admbox">
+  <button type=button class=admback id=admback>
+   <svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 6-6 6 6 6"/></svg>返回</button>
+  <p class=admtip>本窗口为管理员登录界面，交作业无需登录，误入请退出</p>
+  <div class=admrow><span>账号</span><input id=admuser value="admin" readonly tabindex="-1"></div>
+  <div class=admrow><span>密码</span><input id=admpwd type=password autocomplete=off spellcheck=false placeholder="请输入管理员密码"></div>
+  <button type=button class=admgo id=admgo>登录</button>
+  <p class=admerr id=admerr></p>
+ </div>
+</div>
+<button type=button class=whoami id=whoami title="选择你是谁">你是谁？</button>
+<div class=namemask id=namemask>
+ <div class="glass namebox">
+  <button type=button class=nmadmin id=nmadmin>
+   <svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></svg>管理员</button>
+  <button type=button class=nmback id=nmback>
+   <svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 6-6 6 6 6"/></svg>返回</button>
+  <div class=nmtitle>你是谁？</div>
+  <div class=nmsub id=nmsub>先选你的姓氏，再点你的名字</div>
+  <div class=nmcur id=nmcur style="display:none"></div>
+  <div id=surview>
+   <div class=nmsec>第一步 · 选择姓氏</div>
+   <div class=surlist id=surlist></div>
+  </div>
+  <div id=nameview style="display:none">
+   <div class=nmsec id=namehdr>第二步 · 选择姓名</div>
+   <div class=namelist id=namelist></div>
+  </div>
+ </div>
+</div>
 <div class=wrap>
 <h1>作业提交</h1>
 <p class=sub>支持一次选择多个文件 · 文档 / 表格 / 压缩包 / 图片</p>
@@ -568,6 +880,7 @@ __ANNOUNCE__
  <button class=btn id=clear>清空列表</button>
 </div>
 <p class=msg id=msg></p>
+__BEIAN__
 </div>
 <div class=mask id=dupmask>
  <div class="glass dlg">
@@ -578,6 +891,17 @@ __ANNOUNCE__
   <div class=dlgbtns>
    <button class=cta id=dupReplace>🔄 替换原文件</button>
    <button class="btn danger" id=dupCancel>取消</button>
+  </div>
+ </div>
+</div>
+<div class=mask id=whomask>
+ <div class="glass dlg">
+  <h3><svg class=svgico style="color:#b8860b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20c.7-3.6 3.6-5.6 7.2-5.6s6.5 2 7.2 5.6"/></svg>你是谁？</h3>
+  <p class=dtext id=whotext></p>
+  <div class=dlgbtns id=whobtns>
+   <button class=cta id=whofile></button>
+   <button class="btn" id=whopick></button>
+   <button class="btn danger" id=whonone>都不是</button>
   </div>
  </div>
 </div>
@@ -604,7 +928,10 @@ const drop=document.getElementById('drop'),pick=document.getElementById('pick'),
  duplist=document.getElementById('duplist'),dupReplace=document.getElementById('dupReplace'),
  dupCancel=document.getElementById('dupCancel'),
  smallmask=document.getElementById('smallmask'),smalllist=document.getElementById('smalllist'),
- smallOk=document.getElementById('smallOk'),smallCancel=document.getElementById('smallCancel');
+ smallOk=document.getElementById('smallOk'),smallCancel=document.getElementById('smallCancel'),
+ whomask=document.getElementById('whomask'),whotext=document.getElementById('whotext'),
+ whofile=document.getElementById('whofile'),whopick=document.getElementById('whopick'),
+ whonone=document.getElementById('whonone');
 const MAX_MB=__MAX_MB__, MAX_FILES=__MAX_FILES__, MAX_CONC=3, ADMIN_MODE=__ADMIN_MODE__;
 const MAX_SIZE=MAX_MB*1024*1024;
 const BLOCKED=['exe','bat','cmd','com','scr','msi','apk','jar','vbs','ps1','sh','dll','so'];
@@ -735,6 +1062,55 @@ function updateTotal(){
 }
 let uploadFolder='';  // 开始上传时锁定, 防止上传途中切换文件夹
 let replaceSet=new Set();  // 弹窗里选了「替换原文件」的文件 id
+// 当前同学在「你是谁？」里确认过的身份(存在浏览器本地)
+function getWho(){try{return localStorage.getItem('hw_who_name')||''}catch(e){return ''}}
+// 上传前核对身份: 文件名显示的提交人 与 本人选的身份 不一致时, 让同学自己确认
+function askWho(t,fileWho,picked){
+ whotext.innerHTML='文件名显示：<b>'+esc(fileWho)+'</b><br>'+
+  '你选择的名字：<b>'+esc(picked)+'</b>'+
+  '<br><span style="font-size:12.5px;color:#8a97ab">两者不一致，请点你的真实姓名</span>'+
+  '<br><span style="font-size:12px;color:#a5b0c2">文件：'+esc(t.file.name)+'</span>';
+ whofile.textContent=fileWho;
+ whopick.textContent=picked;
+ whomask.classList.add('on');
+ return new Promise(res=>{
+  function done(v){whomask.classList.remove('on');res(v)}
+  function remember(n){if(window.__setWhoName)window.__setWhoName(n)}
+  whofile.onclick=()=>{t.who=fileWho;remember(fileWho);done(true)};
+  whopick.onclick=()=>{t.who=picked;done(true)};
+  whonone.onclick=()=>{
+   whomask.classList.remove('on');
+   if(!window.__openWhoPicker){res(false);return}
+   window.__openWhoPicker().then(function(n){
+    if(n){t.who=n;res(true)}else{res(false)}
+   });
+  };
+ });
+}
+function precheckWho(){
+ const pend=queue.filter(t=>t.status==='pending');
+ const chosen=getWho();
+ if(!chosen||!pend.length)return Promise.resolve(true);
+ return Promise.all(pend.map(t=>{
+  const fd=new FormData();
+  fd.append('folder',uploadFolder);
+  fd.append('name',t.file.name);
+  return fetch('/upload/check',{method:'POST',body:fd})
+   .then(r=>r.json()).catch(()=>({}));
+ })).then(rs=>{
+  // 只在「两边都能确认、且不一致」时才问; 文件名认不出(空)的直接用所选名字命名
+  const bad=pend.map((t,i)=>({t,who:((rs[i]||{}).student)||''}))
+    .filter(x=>x.who&&x.who!==chosen);
+  if(!bad.length)return true;
+  // 串行逐个确认; 前一个文件里改了身份后, 后面的文件按新身份重新判断
+  return bad.reduce((p,x)=>p.then(ok=>{
+   if(!ok)return false;
+   const now=getWho();
+   if(!now||x.who===now)return true;
+   return askWho(x.t,x.who,now);
+  }), Promise.resolve(true));
+ });
+}
 // 上传前查重: 该文件夹内是否已有「这个同学」的文件, 有就让用户选 替换/保留/取消
 function precheck(){
  const pend=queue.filter(t=>t.status==='pending');
@@ -780,10 +1156,13 @@ go.onclick=()=>{
  if(ADMIN_MODE){go.disabled=false;started=true;canceled=false;render();tick();return;}
  askSmall().then(ok=>{
   if(!ok){go.disabled=false;return;}
-  return precheck().then(ok2=>{
-   go.disabled=false;
-   if(!ok2||canceled)return;
-   started=true;canceled=false;render();tick();
+  return precheckWho().then(okW=>{
+   if(!okW){go.disabled=false;return;}
+   return precheck().then(ok2=>{
+    go.disabled=false;
+    if(!ok2||canceled)return;
+    started=true;canceled=false;render();tick();
+   });
   });
  });};
 function conc(){return MAX_CONC}  /* 并发数: 内部固定 3, 不再暴露成用户可配的第二个"数量"概念 */
@@ -807,6 +1186,9 @@ function send(t){
  fd.append('file',t.file);
  fd.append('folder',uploadFolder);
  if(replaceSet.has(t.id))fd.append('replace','1');
+ // 已确认的身份: 文件名认不出人时, 服务端用它按模板命名
+ const _who=t.who||getWho();
+ if(!ADMIN_MODE&&_who)fd.append('chosen',_who);
  const xhr=new XMLHttpRequest();t.xhr=xhr;
  // 看门狗: 30 秒没有任何字节进展 → 判定连接已"黑洞"(换网/休眠/隧道重连),
  // 主动 abort 交给 onabort 走自动重试, 避免永久卡在 0% 没有任何提示
@@ -869,7 +1251,167 @@ function finish(){
  started=false;
 }
 render();
+// 管理员登录弹窗: 账号固定 admin, 只校验密码; 通过后跳到管理页
+(function(){
+ var btn=document.getElementById('admbtn'),mask=document.getElementById('admmask'),
+     back=document.getElementById('admback'),go=document.getElementById('admgo'),
+     pwd=document.getElementById('admpwd'),err=document.getElementById('admerr');
+ if(!btn||!mask||!go)return;
+ function open(){mask.classList.add('show');err.textContent='';
+  setTimeout(function(){try{pwd.focus()}catch(e){}},80)}
+ function close(){mask.classList.remove('show');pwd.value='';err.textContent='';go.disabled=false;go.textContent='登录'}
+ btn.onclick=open;
+ back.onclick=close;
+ mask.onclick=function(e){if(e.target===mask)close()};
+ document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&mask.classList.contains('show'))close();});
+ if(pwd)pwd.onkeydown=function(e){if(e.key==='Enter')go.click()};
+ go.onclick=function(){
+  var p=(pwd.value||'').trim();
+  if(!p){err.textContent='请输入密码';pwd.focus();return}
+  go.disabled=true;go.textContent='登录中…';err.textContent='';
+  fetch('/admin/login',{method:'POST',
+   headers:{'Content-Type':'application/x-www-form-urlencoded'},
+   body:'password='+encodeURIComponent(p)})
+   .then(function(r){return r.json()})
+   .then(function(d){
+    if(d&&d.ok){location.href=d.url}
+    else{err.textContent=(d&&d.msg)||'密码错误';pwd.value='';pwd.focus();}
+   })
+   .catch(function(){err.textContent='网络异常，请重试'})
+   .then(function(){go.disabled=false;go.textContent='登录'});
+ };
+})();
+// 「你是谁？」选姓名弹窗：姓氏按百家姓排序(其余按拼音)，选完姓氏再列该姓的人
+(function(){
+ var NAMES=__NAMES_JSON__;
+ if(!NAMES||!NAMES.length)return;
+ var mask=document.getElementById('namemask'),btn=document.getElementById('whoami'),
+     surlist=document.getElementById('surlist'),namelist=document.getElementById('namelist'),
+     surview=document.getElementById('surview'),nameview=document.getElementById('nameview'),
+     namehdr=document.getElementById('namehdr'),nmsub=document.getElementById('nmsub'),
+     nmcur=document.getElementById('nmcur'),nmback=document.getElementById('nmback'),
+     nmadmin=document.getElementById('nmadmin');
+ if(!mask||!btn||!surlist)return;
+ var KEY='hw_who_name';
+ var BAI="赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林刁钟徐邱骆高夏蔡田樊胡凌霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉钮龚程嵇邢滑裴陆荣翁荀羊於惠甄家封芮羿储靳邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘斜厉戎祖武符刘景詹束龙叶幸司韶郜黎蓟薄印宿白怀蒲邰从鄂索咸籍赖卓蔺屠蒙池乔阴胥能苍双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍桑桂濮牛寿通边扈燕冀郏浦尚农温别庄晏柴瞿阎充慕连茹习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧殳沃利蔚越夔隆师巩聂晁勾敖融冷訾辛阚那简饶空曾毋沙乜养鞠须丰巢关蒯相查后荆红游竺权逯盖益桓公";
+ var order={};
+ for(var i=0;i<BAI.length;i++){if(order[BAI.charAt(i)]===undefined)order[BAI.charAt(i)]=i;}
+ var SUR=function(n){return (n||'').charAt(0)};
+ var surs=[],seen={};
+ NAMES.forEach(function(n){var s=SUR(n);if(s&&!seen[s]){seen[s]=1;surs.push(s)}});
+ surs.sort(function(a,b){
+  var ia=order[a],ib=order[b];
+  if(ia===undefined)ia=1e9; if(ib===undefined)ib=1e9;
+  if(ia!==ib)return ia-ib;
+  return a.localeCompare(b,'zh-CN');
+ });
+ var picked='',pickResolve=null;
+ function getCur(){try{return localStorage.getItem(KEY)||''}catch(e){return ''}}
+ function setCur(v){try{localStorage.setItem(KEY,v)}catch(e){}}
+ function markSur(s){
+  [].forEach.call(surlist.children,function(el){
+   el.className='surbtn'+(el.textContent===s?' on':'');
+  });
+ }
+ function peopleOf(s){return NAMES.filter(function(n){return SUR(n)===s})}
+ function renderSurs(){
+  surlist.innerHTML='';
+  surs.forEach(function(s){
+   var b=document.createElement('button');
+   b.type='button';b.className='surbtn'+(s===picked?' on':'');b.textContent=s;
+   b.onclick=function(){
+    picked=s;
+    var list=peopleOf(s);
+    // 该姓只有一个人: 不用再点姓名, 直接选中
+    if(list.length===1){choose(list[0]);return}
+    showNames(s);
+   };
+   surlist.appendChild(b);
+  });
+  surview.style.display='';nameview.style.display='none';
+  nmsub.textContent='先选你的姓氏，再点你的名字';
+ }
+ function showNames(s){
+  surview.style.display='none';nameview.style.display='';
+  nmsub.textContent='点你的名字完成选择；选错了点右上角「返回」重选姓氏';
+  var list=peopleOf(s);
+  namehdr.textContent='第二步 · 选姓名（'+s+'姓 · '+list.length+' 人）';
+  namelist.innerHTML='';
+  var cur=getCur();
+  list.forEach(function(n){
+   var b=document.createElement('button');
+   b.type='button';b.className='nmbtn'+(n===cur?' cur':'');b.textContent=n;
+   b.onclick=function(){choose(n)};
+   namelist.appendChild(b);
+  });
+  markSur(s);
+ }
+ function updateBadge(){
+  var c=getCur();
+  if(c){btn.textContent=c;btn.classList.add('set')}
+  else{btn.textContent='你是谁？';btn.classList.remove('set')}
+ }
+ function open(){
+  picked='';renderSurs();
+  var c=getCur();
+  if(c){nmcur.style.display='';nmcur.textContent='当前：'+c}
+  else{nmcur.style.display='none'}
+  mask.classList.add('show');
+ }
+ function choose(n){
+  setCur(n);updateBadge();
+  var r=pickResolve;pickResolve=null;
+  mask.classList.remove('show');
+  if(r)r(n);
+ }
+ function close(){
+  mask.classList.remove('show');
+  var r=pickResolve;pickResolve=null;
+  if(r)r('');            // 直接关掉 = 不选, 让调用方当作用户取消
+ }
+ // 供上传流程里的「都不是」调用: 打开选姓名并等用户选完
+ window.__openWhoPicker=function(){
+  return new Promise(function(res){pickResolve=res;open()});
+ };
+ // 供冲突弹窗回写身份(选「我是张三」时同步本地记录与右上角徽标)
+ window.__setWhoName=function(n){if(n){setCur(n);updateBadge()}};
+ function back(){
+  if(nameview.style.display!=='none'){renderSurs()}
+  else{close()}
+ }
+ btn.onclick=open;
+ nmback.onclick=back;
+ if(nmadmin)nmadmin.onclick=function(){
+  var a=document.getElementById('admbtn');if(a)a.click();
+ };
+ mask.onclick=function(e){if(e.target===mask)close()};
+ document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&mask.classList.contains('show'))back();
+ });
+ updateBadge();
+ if(!getCur())setTimeout(open,320);
+})();
 </script></body></html>""")
+
+def load_beian() -> str:
+    """页脚备案信息: 读 DATA_DIR 下的 .icp / .police 两个文本文件(可只写其中一个)。
+    文件不存在就返回空串(页脚不渲染)。拿到备案号后只需写文件, 不用改代码、不用重新部署。"""
+    def rd(name):
+        try:
+            with open(os.path.join(DATA_DIR, name), encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    icp, police = rd(".icp"), rd(".police")
+    parts = []
+    if icp:
+        parts.append('<a href="https://beian.miit.gov.cn/" target="_blank" '
+                     'rel="noopener noreferrer">%s</a>' % html.escape(icp))
+    if police:
+        parts.append('<a href="https://beian.gov.cn/" target="_blank" '
+                     'rel="noopener noreferrer">%s</a>' % html.escape(police))
+    return ('<div class=beian>' + ' · '.join(parts) + '</div>') if parts else ""
 
 def index_html(embed: bool = False) -> str:
     # 不再提供"未分类(根目录)"选项: 必须选择文件夹才能提交;
@@ -901,6 +1443,7 @@ def index_html(embed: bool = False) -> str:
         limit_hint = ""
         max_mb_v, max_files_v, admin_mode = "Infinity", "Infinity", "true"
         embed_css = ("html,body{background:transparent!important}.orb{display:none!important}"
+                     ".admbtn,.admmask,.whoami,.namemask{display:none!important}"
                      "body{padding:0!important}h1,.sub{display:none!important}"
                      ".wrap{max-width:100%!important}.drop small:empty{display:none}")
     else:
@@ -911,6 +1454,10 @@ def index_html(embed: bool = False) -> str:
     return (INDEX_TPL.replace("__FOLDERS__", opts)
             .replace("__YEARS__", year_opts)
             .replace("__MONTHS__", month_opts)
+            .replace("__NAMES_JSON__",
+                     json.dumps([] if embed else load_roster(),
+                                ensure_ascii=False).replace("</", "<\\/"))
+            .replace("__BEIAN__", load_beian())
             .replace("__ANNOUNCE__", announce)
             .replace("__LIMIT_HINT__", limit_hint)
             .replace("__MAX_MB__", max_mb_v)
@@ -971,6 +1518,8 @@ def upload():
     # replace=1: 上传前弹窗确认过「替换原文件」——删掉该文件夹内属于同一同学的
     # 所有文件(识别优先, 认不出按精确同名), 让新文件顶替, 不再走 (n) 改名
     replace_mode = (request.form.get("replace") or "") == "1"
+    # 同学在「你是谁？」里确认的身份: 文件名认不出人时用它兜底命名
+    chosen = (request.form.get("chosen") or "").strip()[:32]
     # 诊断用: 请求真正到达服务端就打一行; 若日志里只有"开始"没有"完成",
     # 说明是传输中途断了(网络/休眠/隧道), 而不是服务端处理卡住
     print(f"[upload] 开始 {name} · {request.content_length or '?'} 字节 · "
@@ -992,7 +1541,7 @@ def upload():
     f.save(path)
     # 自动规范化: 识别出是名单里的谁, 就改成「学号 姓名」标准格式
     # (学号取名单里的, 不信文件名; 认不出/多人混淆/名单无学号时保持原样)
-    name = auto_normalize(target, name)
+    name = auto_normalize(target, name, chosen)
     print(f"[upload] 完成 {name} · 用时 {time.time() - _t0:.1f}s", flush=True)
     return Response(json.dumps({"status": "uploaded", "name": name,
                                 "folder": folder}),
@@ -1213,17 +1762,16 @@ __CHECK_ICON__
 
 <div id=tabManage>
 <section class="glass panel">
- <div class=bar>
-  <form id=ffilter method=get style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+ <form id=ffilter method=get>
    <input type=hidden name=token value="__TOKEN__">
-   <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
-   <select id=ffolder name=folder>
-    <option value="all"__SEL_ALL__>全部文件夹</option>
-    <option value="__root__"__SEL_ROOT__>未分类</option>
+   <div class="tool" style="padding:0;margin:0">
+    <span class=tsel><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</label>
+    <select id=ffolder name=folder>
 __FOLDER_OPTS__
-   </select>
+    </select></span>
+    <span class="tsel tsel-ym"><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></svg>年月</label><select id=myf title="按年份筛选文件夹">__MYEARS__</select><select id=mym title="按月份筛选文件夹">__MMONTHS__</select></span>
+   </div>
   </form>
- </div>
  <div class=fmgr>
   <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹管理（对当前筛选的文件夹生效）</span>
   <div class=fmgr-btns>
@@ -1245,7 +1793,6 @@ __FOLDER_OPTS__
   <span class=lbl><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</span>
   <select name=folder id=dfolder>
    <option value="all"__SEL_DL_ALL__>全部文件夹</option>
-   <option value="__root__"__SEL_DL_ROOT__>未分类</option>
 __DL_FOLDER_OPTS__
   </select>
   <button type=submit class=cta id=rbtn>打包下载 ZIP</button>
@@ -1310,10 +1857,16 @@ __UP_JS__
     <label><input type=checkbox name=normalize value=1 id=normOn __NORMON__> 启用「自动规范化文件名」（按模板改名）</label>
    </div>
    <div class=fld>
-    <span class=cap>命名模板</span>
+    <span class=cap>默认班级（名单里没写班级时使用）</span>
+    <input type=text name=class_name value="__CLS__" maxlength=40
+     placeholder="如: 2026级信息安全班">
+   </div>
+   <div class=fld>
+    <span class=cap>命名模板（全局默认）</span>
     <input type=text name=template id=tpl value="__TPL__" maxlength=120
-     placeholder="输入关键字与连接符号, 如: 姓名_学号 文件名称">
+     placeholder="输入关键字与连接符号, 如: 班级 姓名 学号">
     <div class=chips>
+     <button type=button class="btn mini" onclick="insTpl('班级')">＋班级</button>
      <button type=button class="btn mini" onclick="insTpl('姓名')">＋姓名</button>
      <button type=button class="btn mini" onclick="insTpl('学号')">＋学号</button>
      <button type=button class="btn mini" onclick="insTpl('文件名称')">＋文件名称</button>
@@ -1335,10 +1888,38 @@ __UP_JS__
     </div>
    </div>
    <button type=submit class=cta style="width:100%;margin-top:6px;text-align:center;justify-content:center">保存设置</button>
-   <p class=note id=cfgNote style="display:none">模板里写 <b>姓名 / 学号 / 文件名称 / 日期</b> 四个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）。例：「姓名_学号 文件名称」→「张三_17 example」；「学号-姓名-文件名称」→「17-张三-example」。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>「单个大小 / 单次数量」只限制<b>同学端</b>（服务端不限制）；<b>管理端上传不受任何限制</b>。</p>
+   <p class=note id=cfgNote style="display:none">模板里写 <b>班级 / 姓名 / 学号 / 文件名称 / 日期</b> 五个关键字（可增删、自由排序），中间加任意连接符号；<b>日期为当天</b>（年.月.日）；<b>班级</b>取名单里的班级，名单没写就用上面的默认班级。<br><b>实时预览：</b><span id=tplPrev></span><br>关闭开关后：上传保持原名（同名仍自动加 (1) 防覆盖），对应功能入口从管理页隐藏；「作业核对」只受名单识别开关影响。<br>「单个大小 / 单次数量」只限制<b>同学端</b>（服务端不限制）；<b>管理端上传不受任何限制</b>。</p>
    <button type=button class="btn mini" id=noteBtn onclick="toggleNote()">展开说明 ▾</button>
   </form>
  </section>
+
+<section class="glass panel">
+ <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.8A2.8 2.8 0 0 1 6.8 4h3.9l9.3 9.3-6.7 6.7L4 10.7Z"/><circle cx="8.6" cy="8.2" r="1.2"/></svg>文件名规则（按文件夹单独设置）</h3>
+ <p class=sub2>默认用上面的全局模板。某个文件夹有特殊要求时在这里单独指定，例如马原作业要「班级 姓名 学号」；该文件夹的上传改名、批量规范、核对识别都会按它走。<b>模板留空保存 = 清除该文件夹的规则</b>，回到全局模板。</p>
+ <div class=ftpllist style="display:flex;flex-direction:column;gap:6px;margin:2px 0 16px">__FTPL_ROWS__</div>
+ <form method=post action=/admin/folder_tpl>
+  <input type=hidden name=token value="__TOKEN__">
+  <input type=hidden name=folder value="__CURFOLDER__">
+  <div class=fld>
+   <span class=cap>文件夹</span>
+   <select name=tpl_folder>__FTPL_OPTS__</select>
+  </div>
+  <div class=fld>
+   <span class=cap>该文件夹使用的模板</span>
+   <input type=text name=tpl_value id=tplv maxlength=120
+    placeholder="如: 班级 姓名 学号　（留空保存即清除）">
+   <div class=chips>
+    <button type=button class="btn mini" onclick="insTpl2('班级')">＋班级</button>
+    <button type=button class="btn mini" onclick="insTpl2('姓名')">＋姓名</button>
+    <button type=button class="btn mini" onclick="insTpl2('学号')">＋学号</button>
+    <button type=button class="btn mini" onclick="insTpl2('文件名称')">＋文件名称</button>
+    <button type=button class="btn mini" onclick="insTpl2('日期')">＋日期</button>
+   </div>
+  </div>
+  <button type=submit class=cta style="width:100%;margin-top:6px;text-align:center;justify-content:center">保存该文件夹的规则</button>
+  <p class=note style="display:block">优先级：<b>文件夹专属模板 &gt; 全局模板</b>。已存在的文件不会自动改名，需要点管理页的「规范文件名」批量处理。</p>
+ </form>
+</section>
  <section class="glass panel">
   <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4.5" width="12" height="16" rx="2.2"/><path d="M9.5 3.2h5a1.2 1.2 0 0 1 1.2 1.2V6H8.3V4.4a1.2 1.2 0 0 1 1.2-1.2Z"/><path d="M9 10h6"/><path d="M9 13.5h6"/><path d="M9 17h4"/></svg>名单与规范设置</h3>
   <p class=sub2>应交名单：__ROSTER_STATUS__</p>
@@ -1357,6 +1938,52 @@ const T='__TOKEN__';
 const ffolder=document.getElementById('ffolder');
 // 文件夹变化即自动筛选
 ffolder.onchange=()=>document.getElementById('ffilter').submit();
+// 按「年月」筛选文件夹下拉: 只缩小候选; 若当前选中的文件夹被过滤掉, 退回「全部」并提交
+(function(){
+ const fy=document.getElementById('myf'),fm=document.getElementById('mym');
+ if(!fy||!fm)return;
+ const targets=['ffolder','dfolder'].map(function(id){return document.getElementById(id)})
+   .filter(Boolean);
+ if(!targets.length)return;
+ const cache={};
+ targets.forEach(function(s){
+  cache[s.id]=Array.prototype.slice.call(s.querySelectorAll('option'))
+   .map(function(o){return {v:o.value,t:o.textContent,ym:o.dataset.ym||'',fixed:!o.dataset.ym}});
+ });
+ function render(){
+  const y=fy.value,m=fm.value;
+  targets.forEach(function(s){
+   const keep=s.value;
+   const list=cache[s.id].filter(function(o){
+    if(o.fixed)return true;
+    if(y!=='all'&&o.ym.slice(0,4)!==y)return false;
+    if(m!=='all'&&o.ym.slice(5,7)!==m)return false;
+    return true;
+   });
+   while(s.firstChild)s.removeChild(s.firstChild);
+   list.forEach(function(o){
+    const e=document.createElement('option');
+    e.value=o.v;e.textContent=o.t;
+    if(o.ym)e.dataset.ym=o.ym;
+    s.appendChild(e);
+   });
+   s.value=list.some(function(o){return o.v===keep})?keep:(list[0]?list[0].v:'all');
+   if(s.id==='ffolder'&&keep!==s.value&&keep!=='all'&&keep!=='__root__'){
+    document.getElementById('ffilter').submit();
+   }
+  });
+ }
+ fy.onchange=fm.onchange=render;
+ // 默认落在「当前年 + 当前月」; 当月一个文件夹都没有时退回「全部」
+ var now=new Date(),curY=String(now.getFullYear()),
+     curM=('0'+(now.getMonth()+1)).slice(-2);
+ fy.value=[].some.call(fy.options,function(o){return o.value===curY})?curY:'all';
+ fm.value=curM;
+ render();
+ var tgt=document.getElementById('ffolder');
+ var cnt=tgt?[].filter.call(tgt.options,function(o){return o.dataset.ym}).length:0;
+ if(!cnt){fy.value='all';fm.value='all';render()}
+})();
 function goBack(act,name){
  let u='/admin/folder/'+act+'?token='+T
   +'&folder='+encodeURIComponent(ffolder.value);
@@ -1444,11 +2071,13 @@ function toggleNote(){
 // 命名模板: 元素快捷插入 + 实时预览(与服务端 render_template 逻辑一致)
 const tplIn=document.getElementById('tpl'),tplPrev=document.getElementById('tplPrev');
 function insTpl(k){tplIn.value+=k;updTpl();tplIn.focus();}
+function insTpl2(k){var el=document.getElementById('tplv');if(el){el.value+=k;el.focus();}}
 function updTpl(){
  const d=new Date();
  const today=d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate();
- const s=(tplIn.value||'').replace(/姓名/g,'张三').replace(/学号/g,'20260000000001')
-  .replace(/文件名称/g,'example').replace(/日期/g,today);
+ const s=(tplIn.value||'').replace(/文件名称/g,'example')
+  .replace(/班级/g,'2026级信息安全班').replace(/姓名/g,'张三')
+  .replace(/学号/g,'20260000000001').replace(/日期/g,today);
  tplPrev.textContent=s||'(模板为空)';
 }
 if(tplIn){tplIn.oninput=updTpl;updTpl();}
@@ -1618,7 +2247,40 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <div class=cfilter>
  <span class=lbl>文件夹</span>
  <select id=cfolder onchange="location='/admin/check?token=__TOKEN__&amp;folder='+encodeURIComponent(this.value)">__FOLDER_OPTS__</select>
+ <select id=cyf title="按年份筛选文件夹">__MYEARS__</select>
+ <select id=cym title="按月份筛选文件夹">__MMONTHS__</select>
 </div>
+<script>
+(function(){
+ var fy=document.getElementById('cyf'),fm=document.getElementById('cym'),
+     sel=document.getElementById('cfolder');
+ if(!fy||!fm||!sel)return;
+ var src=Array.prototype.slice.call(sel.querySelectorAll('option[data-ym]'))
+  .map(function(o){return {v:o.value,t:o.textContent,ym:o.dataset.ym||''}});
+ if(!src.length)return;
+ function go(v){location='/admin/check?token=__TOKEN__&folder='+encodeURIComponent(v)}
+ function render(){
+  var y=fy.value,m=fm.value,keep=sel.value;
+  var list=src.filter(function(o){
+   if(y!=='all'&&o.ym.slice(0,4)!==y)return false;
+   if(m!=='all'&&o.ym.slice(5,7)!==m)return false;
+   return true;
+  });
+  if(!list.length)return;
+  while(sel.firstChild)sel.removeChild(sel.firstChild);
+  list.forEach(function(o){
+   var e=document.createElement('option');
+   e.value=o.v;e.textContent=o.t;e.dataset.ym=o.ym;
+   sel.appendChild(e);
+  });
+  var stillOk=list.some(function(o){return o.v===keep});
+  sel.value=stillOk?keep:list[0].v;
+  if(!stillOk)go(sel.value);
+ }
+ fy.onchange=fm.onchange=render;
+ render();
+})();
+</script>
 
 <section class="glass panel">
  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/></svg>总览</h3>
@@ -1676,6 +2338,14 @@ h1{font-size:30px;font-weight:800;margin-bottom:6px;
  -webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{color:#5a6a81;font-size:14px;margin-bottom:18px;line-height:1.7}
 .panel{padding:18px 20px;margin-bottom:18px}
+.tool{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:13px 16px;margin-bottom:14px}
+.tsel{display:flex;align-items:center;gap:8px;flex:1 1 240px;min-width:0}
+.tsel label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.tsel select{min-width:0}
+.tsel-ym{flex:0 1 220px}
+.tsel-ym select{flex:1 1 0;min-width:66px}
+.ymhint{display:none;font-size:12.5px;color:#8a97ab;margin:-6px 2px 12px}
+.ymhint.show{display:block}
 h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 .nrow{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:12px;margin:6px;
  background:rgba(46,125,91,.06);border:1px solid rgba(46,125,91,.18);flex-wrap:wrap}
@@ -1705,6 +2375,11 @@ h3{font-size:16px;font-weight:700;color:#31405e;margin-bottom:12px}
 <div class=wrap>
 <h1>规范文件名</h1>
 <p class=sub>__SCOPE____NOTE__</p>
+<div class="glass tool">
+ <span class=tsel><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2h6.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z"/></svg>文件夹</label><select id=nfolder onchange="location='/admin/normalize?token=__TOKEN__&amp;folder='+encodeURIComponent(this.value)">__FOLDER_OPTS__</select></span>
+ <span class="tsel tsel-ym"><label><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></svg>年月</label><select id=nyf title="按年份筛选文件夹">__MYEARS__</select><select id=nym title="按月份筛选文件夹">__MMONTHS__</select></span>
+</div>
+<p class=ymhint id=ymhint></p>
 __WARNBOX__
 <section class="glass panel">
  <h3><svg class=svgico viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20v-6"/><path d="M11 20V8"/><path d="M16 20v-9"/></svg>总览</h3>
@@ -1723,20 +2398,142 @@ __SKIPSEC__
  <a class=btn href="/admin?token=__TOKEN__&__BACK__">← 返回管理页</a>
 </div>
 </div>
+<script>
+(function(){
+ var fy=document.getElementById('nyf'),fm=document.getElementById('nym'),
+     sel=document.getElementById('nfolder'),hint=document.getElementById('ymhint');
+ if(!fy||!fm||!sel)return;
+ var src=Array.prototype.slice.call(sel.querySelectorAll('option')).map(function(o){
+  return {v:o.value,t:o.textContent,ym:o.dataset.ym||''};
+ });
+ var fixed=src.filter(function(o){return !o.ym});
+ var dyn=src.filter(function(o){return o.ym});
+ if(!dyn.length)return;
+ var now=new Date(),curY=String(now.getFullYear()),
+     curM=('0'+(now.getMonth()+1)).slice(-2);
+ function render(){
+  var y=fy.value,m=fm.value,keep=sel.value;
+  var list=fixed.concat(dyn.filter(function(o){
+   if(y!=='all'&&o.ym.slice(0,4)!==y)return false;
+   if(m!=='all'&&o.ym.slice(5,7)!==m)return false;
+   return true;
+  }));
+  while(sel.firstChild)sel.removeChild(sel.firstChild);
+  list.forEach(function(o){
+   var e=document.createElement('option');
+   e.value=o.v;e.textContent=o.t;
+   if(o.ym)e.dataset.ym=o.ym;
+   sel.appendChild(e);
+  });
+  var still=list.some(function(o){return o.v===keep});
+  sel.value=still?keep:(list[0]?list[0].v:'all');
+  if(hint){
+   hint.textContent=still?'':'当前文件夹不在所选年月里，已切到「'+
+     (list[0]?list[0].t:'全部文件夹')+'」';
+   hint.classList.toggle('show',!!hint.textContent);
+  }
+ }
+ // 默认: 当前有具体文件夹就对齐它所在的年月, 否则用当前年+当前月
+ var cur=src.filter(function(o){return o.v===sel.value})[0];
+ if(cur&&cur.ym){fy.value=cur.ym.slice(0,4);fm.value=cur.ym.slice(5,7)}
+ else{
+  fy.value=[].some.call(fy.options,function(o){return o.value===curY})?curY:'all';
+  fm.value=curM;
+ }
+ render();
+ var vis=[].filter.call(sel.options,function(o){return o.dataset.ym}).length;
+ if(!vis){fy.value='all';fm.value='all';render()}
+ fy.onchange=fm.onchange=function(){
+  var keep=sel.value;render();
+  if(keep&&keep!=='all'&&keep!=='__root__'&&sel.value!==keep){
+   location='/admin/normalize?token=__TOKEN__&folder='+encodeURIComponent(sel.value);
+  }
+ };
+})();
+</script>
 </body></html>""")
 
 def folder_options(cur: str) -> str:
     rows = ""
     for d in list_folders():
         sel = " selected" if cur == d else ""
-        rows += f'    <option value="{html.escape(d)}"{sel}>{html.escape(d)}</option>\n'
+        rows += (f'    <option value="{html.escape(d)}" data-ym="{folder_ym(d)}"{sel}>'
+                 f'{html.escape(d)}</option>\n')
     return rows.rstrip("\n")
+
+def ym_options():
+    """(年份下拉, 月份下拉) 的 option 串, 供管理端/核对页按年月筛选文件夹"""
+    yms = {d: folder_ym(d) for d in list_folders()}
+    years = sorted({v[:4] for v in yms.values() if v}, reverse=True)
+    years_html = '<option value="all">全部</option>' + "".join(
+        f'<option value="{y}">{y}</option>' for y in years)
+    months_html = '<option value="all">全部</option>' + "".join(
+        f'<option value="{m:02d}">{m}</option>' for m in range(1, 13))
+    return years_html, months_html
+
+LOGIN_FAIL_FILE = os.path.join(DATA_DIR, ".login_fail.json")
+LOGIN_MAX_FAIL = 5        # 1 分钟内允许的失败次数
+LOGIN_WINDOW = 60         # 计数窗口(秒)
+
+def _fail_load() -> dict:
+    try:
+        d = json.load(open(LOGIN_FAIL_FILE, encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def _fail_save(d: dict):
+    try:
+        tmp = LOGIN_FAIL_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        os.replace(tmp, LOGIN_FAIL_FILE)
+    except OSError:
+        pass
+
+def client_ip() -> str:
+    """真实客户端 IP: 服务跑在 nginx 反代后面, remote_addr 恒为 127.0.0.1,
+    必须取 nginx 写入的 X-Real-IP(由 nginx 覆盖设置, 不可被浏览器伪造)。"""
+    ip = (request.headers.get("X-Real-IP") or "").strip()
+    if not ip:
+        ip = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    return ip or (request.remote_addr or "-")
+
+@app.post("/admin/login")
+def admin_login():
+    """同学端「管理员」按钮的登录入口: 账号固定 admin, 只校验密码(=管理令牌)。
+    同一 IP 1 分钟内失败 5 次即暂时拒绝。计数落盘, 因为 gunicorn 有多个 worker,
+    内存计数在 worker 之间不共享。"""
+    ip = client_ip()
+    now = time.time()
+    fails = {k: [t for t in v if now - t < LOGIN_WINDOW]
+             for k, v in _fail_load().items() if isinstance(v, list)}
+    hist = fails.get(ip, [])
+    if len(hist) >= LOGIN_MAX_FAIL:
+        return Response(json.dumps({"ok": False, "msg": "尝试次数过多，请 1 分钟后再试"},
+                                   ensure_ascii=False),
+                        mimetype="application/json")
+    pwd = (request.form.get("password") or "").strip()
+    if pwd and pwd == ADMIN_TOKEN:
+        fails.pop(ip, None)
+        _fail_save(fails)
+        return Response(json.dumps({"ok": True, "url": "/admin?token=" + ADMIN_TOKEN}),
+                        mimetype="application/json")
+    hist.append(now)
+    fails[ip] = hist
+    _fail_save(fails)
+    time.sleep(0.5)          # 轻微延迟, 抬高暴力尝试成本
+    return Response(json.dumps({"ok": False, "msg": "密码错误"}, ensure_ascii=False),
+                    mimetype="application/json")
 
 @app.get("/admin")
 def admin():
     if not is_admin():
         abort(401)
     folder = norm_folder(request.args.get("folder"))
+    # 管理页筛选中已去掉「全部文件夹/未分类」: 落到具体文件夹, 默认最近有变动的那个
+    if folder in ("all", "__root__"):
+        folder = default_folder()
     files = []
     for rel, fn, p, mt, sz in iter_all_files():
         if not match_folder(rel, folder):
@@ -1807,9 +2604,25 @@ def admin():
         check_hint = ('点右上角的核对图标查看当前文件夹的核对报告（谁没交/已交明细）；'
                       '同学上传后若识别出是谁（且名单有其学号），文件会按命名模板自动改名，'
                       '「规范文件名」可批量处理历史文件')
+    # 文件夹专属命名模板列表
+    _ftpls = load_folder_tpls()
+    _rows = ""
+    for _f in list_folders():
+        if _f in _ftpls:
+            _rows += (f'<div><span class=ftag>{html.escape(_f)}</span>'
+                      f'<span style="font-size:12.5px;color:#5a6a81;margin-left:8px">'
+                      f'{html.escape(_ftpls[_f])}</span></div>')
+    ftpl_rows = _rows or ('<div style="font-size:13px;color:#8a97ab">'
+                          '暂无单独设置的文件夹，全部使用全局模板</div>')
+    _my, _mm = ym_options()
     up_css, up_body, up_js = upload_pane_parts()
     page = (ADMIN_TPL
             .replace("__N__", str(len(files)))
+            .replace("__MYEARS__", _my)
+            .replace("__MMONTHS__", _mm)
+            .replace("__CLS__", html.escape(load_default_class()))
+            .replace("__FTPL_ROWS__", ftpl_rows)
+            .replace("__FTPL_OPTS__", folder_options(""))
             .replace("__ROSTER_STATUS__", roster_status)
             .replace("__RECON__", " checked" if _cfg.get("recognize") else "")
             .replace("__NORMON__", " checked" if _cfg.get("normalize") else "")
@@ -1868,6 +2681,24 @@ def admin_settings():
     cfg["max_mb"] = _clamp(request.form.get("max_mb"), 10, 5000, cfg["max_mb"])
     cfg["max_files"] = _clamp(request.form.get("max_files"), 1, 999, cfg["max_files"])
     save_config(cfg)
+    save_default_class(request.form.get("class_name") or "")
+    folder = norm_folder(request.form.get("folder"))
+    return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
+
+@app.post("/admin/folder_tpl")
+def admin_folder_tpl():
+    """保存/清除某个文件夹的专属命名模板(留空 = 清除, 回落到全局模板)"""
+    if not is_admin():
+        abort(401)
+    target = safe_name((request.form.get("tpl_folder") or "").strip()[:64])
+    tpl = (request.form.get("tpl_value") or "").strip()[:120]
+    d = load_folder_tpls()
+    if target in list_folders():
+        if tpl and template_valid(tpl):
+            d[target] = tpl
+        elif not tpl:
+            d.pop(target, None)
+    save_folder_tpls(d)
     folder = norm_folder(request.form.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
@@ -1878,6 +2709,7 @@ def folder_add():
     name = safe_name((request.args.get("name") or "").strip())[:32]
     if name and name not in list_folders():
         os.makedirs(os.path.join(UPLOAD_DIR, name), exist_ok=True)
+        set_folder_meta(name)          # 记录创建年月, 之后按它归入年/月筛选
     return redirect(f"/admin?token={ADMIN_TOKEN}&{_back_query()}")
 
 @app.get("/admin/folder/delete")
@@ -1888,6 +2720,7 @@ def folder_delete():
     if name and name in list_folders():
         # 删除文件夹时, 其中所有文件一并删除
         shutil.rmtree(os.path.join(UPLOAD_DIR, name), ignore_errors=True)
+        drop_folder_meta(name)
     return redirect(f"/admin?token={ADMIN_TOKEN}&{_back_query()}")
 
 @app.get("/admin/folder/rename")
@@ -1900,6 +2733,7 @@ def folder_rename():
     if old and new and old != new and old in list_folders() \
        and new not in list_folders():
         os.rename(os.path.join(UPLOAD_DIR, old), os.path.join(UPLOAD_DIR, new))
+        rename_folder_meta(old, new)   # 创建年月记录跟着走
         # 重命名成功后, 筛选自动切到新名字
         return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(new)}")
     msg = "重命名失败：新名称不合法或已存在同名文件夹"
@@ -1913,7 +2747,12 @@ def admin_roster():
         abort(401)
     folder = norm_folder(request.args.get("folder"))
     pairs = load_roster_pairs()
-    text = "\n".join(f"{n}\t{s}" if s else n for n, s in pairs)
+    try:
+        triples = parse_roster_full(open(ROSTER_FILE, encoding="utf-8").read())
+    except OSError:
+        triples = [(n, s, "") for n, s in pairs]
+    text = "\n".join((f"{n}\t{s}\t{c}" if c else (f"{n}\t{s}" if s else n))
+                     for n, s, c in triples)
     page = (ROSTER_TPL
             .replace("__CNT__", str(len(pairs)))
             .replace("__IDCNT__", str(sum(1 for _, s in pairs if s)))
@@ -1928,9 +2767,10 @@ def admin_roster_save():
     """保存应交名单(姓名+学号; 换行/逗号/分号分隔均可, 自动去重)"""
     if not is_admin():
         abort(401)
-    pairs = parse_roster(request.form.get("names") or "")
+    triples = parse_roster_full(request.form.get("names") or "")
     with open(ROSTER_FILE, "w") as f:
-        f.write("\n".join(f"{n}\t{s}" if s else n for n, s in pairs))
+        f.write("\n".join((f"{n}\t{s}\t{c}" if c else (f"{n}\t{s}" if s else n))
+                          for n, s, c in triples))
     folder = norm_folder(request.form.get("folder"))
     return redirect(f"/admin?token={ADMIN_TOKEN}&folder={quote(folder)}")
 
@@ -1971,7 +2811,7 @@ def admin_check():
         if not match_folder(rel, folder):
             continue
         files.append((rel, fn, p, mt, sz))
-    submitted, matched, unknown = match_roster(roster, files)
+    submitted, matched, unknown = match_roster(roster, files, load_roster_pairs())
     # 免交名单: 只对当前文件夹生效, 从「应交」和「未交」里扣除
     exempt = exempt_of(folder, roster)
     exset = set(exempt)
@@ -2032,7 +2872,10 @@ def admin_check():
         f'<span>{html.escape(x)}</span></label>' for x in roster)
     exstat = (f'<div><div class=num style="color:#b8860b">{len(exempt)}</div>'
               f'<div class=cap>免交（不计入应交）</div></div>' if exempt else "")
+    _my, _mm = ym_options()
     page = (CHECK_TPL
+            .replace("__MYEARS__", _my)
+            .replace("__MMONTHS__", _mm)
             .replace("__SCOPE__", scope)
             .replace("__NOTE__", note)
             .replace("__FOLDER_OPTS__", fopts)
@@ -2171,12 +3014,20 @@ def admin_normalize():
     else:
         note = ""
         warnbox = ('<div class=warnbox><b>此操作会真正重命名文件，不可撤销。</b>'
-                   '请核对上面的清单——按管理页右上角「设置」里的命名模板生成；'
+                   '请核对上面的清单——文件名按该文件夹的命名规则生成'
+                   '（「设置」里的文件夹专属模板优先，没有则用全局模板）；'
                    '认不出是谁的、命中多个姓名的（如小组作业）会保持原样，列在下方「保持不变」里。</div>')
         gobtn = (f'<a class=cta href="/admin/normalize/run?token={ADMIN_TOKEN}'
                  f'&folder={quote(folder)}" onclick="return confirm(\'确认执行这 '
                  f'{len(ren)} 个重命名？\')">确认执行重命名</a>' if ren else "")
+    fopts = (f'<option value="all"{" selected" if folder == "all" else ""}>全部文件夹</option>'
+             f'<option value="__root__"{" selected" if folder == "__root__" else ""}>未分类</option>'
+             + folder_options(folder))
+    _my, _mm = ym_options()
     page = (NORMALIZE_TPL
+            .replace("__FOLDER_OPTS__", fopts)
+            .replace("__MYEARS__", _my)
+            .replace("__MMONTHS__", _mm)
             .replace("__SCOPE__", scope)
             .replace("__NOTE__", note)
             .replace("__WARNBOX__", warnbox)
